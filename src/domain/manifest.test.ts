@@ -3,19 +3,19 @@ import { describe, expect, it } from 'vitest'
 import { decodeManifest, runLoad } from './manifest'
 
 const validManifest = {
-	id: 'slides',
-	name: 'Slides',
+	id: 'writing',
+	name: 'Writing',
 	version: '1.0.0',
 	minAppVersion: '1.0.0',
-	description: 'Obsidian plugin shell.',
+	description: 'Event-sourced canon for novels and LitRPG.',
 	isDesktopOnly: false,
 }
 
 describe('decodeManifest', () => {
 	it('decodes a valid manifest', async () => {
 		const manifest = await Effect.runPromise(decodeManifest(validManifest))
-		expect(manifest.id).toBe('slides')
-		expect(manifest.name).toBe('Slides')
+		expect(manifest.id).toBe('writing')
+		expect(manifest.name).toBe('Writing')
 	})
 
 	it('rejects an empty id', async () => {
@@ -29,6 +29,10 @@ describe('decodeManifest', () => {
 describe('runLoad', () => {
 	it('decodes the plugin manifest', async () => {
 		const manifest = await Effect.runPromise(runLoad())
-		expect(manifest.id).toBe('slides')
+		expect(manifest.id).toBe('writing')
+		expect(manifest.name).toBe('Writing')
+		expect(manifest.description).toBe(
+			'Event-sourced canon for novels and LitRPG.',
+		)
 	})
 })
