@@ -1,0 +1,8 @@
+{
+	"id": "slides",
+	"name": "Slides",
+	"version": "1.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "Obsidian plugin shell.",
+	"isDesktopOnly": false
+}
