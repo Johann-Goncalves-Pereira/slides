@@ -1,0 +1,30 @@
+# Event sourcing
+
+Phase 1 ships the pure story engine in `src/domain/story/`. Vault I/O, LLM extraction, and UI are not part of this module.
+
+## Public seams
+
+- `decodeStoryEvent` / `decodeWorldState` validate untrusted payloads with `effect/Schema`.
+- `compareCoordinates` orders `{ branchId, chapterOrder, sceneIndex, beatIndex, timestamp }`. `branchId` defaults to `"main"`.
+- `compareEvents` uses that order, then `eventId`, so two changes in the same beat have one order.
+- `reduceWorld(initial, events)` sorts, then folds. It returns `Effect`, and fails with `UnknownEntity` or `InsufficientQuantity` instead of throwing.
+- `buildSnapshots(initial, events, policy)` checkpoints a branch after every `everyNEvents` events and after a chapter whose `chapterOrder` is a positive multiple of `everyNChapters`. The named default is 250 events and 25 chapters.
+- `rehydrateAt(coordinate)` asks a `Ledger` for the latest snapshot at or before that coordinate on the same branch, then folds the strict tail. Other branches are ignored.
+
+A snapshot contains every event at or before its coordinate. Replay starts after that coordinate. Rehydrating from the snapshot equals folding the branch from the initial world.
+
+## Event shapes
+
+Characters must already exist on the initial `WorldState`. The engine does not create them.
+
+- `STAT_CHANGE` carries a non-empty map of stat name to finite delta. A missing stat starts at 0. Totals may go below 0.
+- `AFFINITY_SHIFT` updates `targetEntity` (the subject) toward `object` on `axis` by `delta`.
+- `INVENTORY_MUTATION` is `ADD` or `REMOVE` of `itemId`, `name`, and a positive `quantity`. Removing more than held fails.
+- `STATUS_EFFECT` is `APPLY` or `CLEAR`. A second `APPLY` of the same name replaces `durationScenes`. Duration is stored and not counted down.
+
+## Not in this phase
+
+- **Path identity.** Events are keyed by `eventId`. When a chapter file is renamed, a vault adapter must keep that id and update any path metadata. The reducer never uses a vault path as identity.
+- **`OVERRIDE_SYNC`.** If an author edits stat numbers in frontmatter directly, the vault layer detects drift and appends an explicit sync event. The reducer will not invent that event by itself.
+- **Scene ticking.** Status duration needs a future event type before remaining scenes decrease.
+- **`globalFlags`.** No event writes world flags, so the state does not carry them yet.
