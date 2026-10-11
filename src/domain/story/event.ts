@@ -51,11 +51,20 @@ export const StatusEffectEvent = Schema.Struct({
 	durationScenes: Schema.optional(Schema.NonNegativeInt),
 })
 
+export const OverrideSyncEvent = Schema.Struct({
+	eventId: Schema.NonEmptyString,
+	targetEntity: Schema.NonEmptyString,
+	coordinate: StoryCoordinate,
+	type: Schema.Literal('OVERRIDE_SYNC'),
+	stats: StatDeltas,
+})
+
 export const StoryEvent = Schema.Union(
 	StatChangeEvent,
 	AffinityShiftEvent,
 	InventoryMutationEvent,
 	StatusEffectEvent,
+	OverrideSyncEvent,
 )
 
 export type StoryEvent = typeof StoryEvent.Type

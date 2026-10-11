@@ -285,4 +285,40 @@ describe('reduceWorld', () => {
 			reversed.characters.Arthur?.activeStatuses,
 		)
 	})
+
+	it('sets an absolute stat and leaves the other stats', async () => {
+		const initial = await Effect.runPromise(
+			decodeWorldState({
+				characters: {
+					Arthur: {
+						...arthurWorld.characters.Arthur,
+						stats: { HP: 100, MP: 5 },
+					},
+				},
+			}),
+		)
+		const events = [
+			await Effect.runPromise(
+				decodeStoryEvent({
+					eventId: 'evt-damage',
+					targetEntity: 'Arthur',
+					coordinate: coordinate(1, 170),
+					type: 'STAT_CHANGE',
+					deltas: { HP: -20 },
+				}),
+			),
+			await Effect.runPromise(
+				decodeStoryEvent({
+					eventId: 'evt-override',
+					targetEntity: 'Arthur',
+					coordinate: coordinate(2, 171),
+					type: 'OVERRIDE_SYNC',
+					stats: { HP: 50 },
+				}),
+			),
+		]
+		const world = await Effect.runPromise(reduceWorld(initial, events))
+		expect(world.characters.Arthur?.stats.HP).toBe(50)
+		expect(world.characters.Arthur?.stats.MP).toBe(5)
+	})
 })

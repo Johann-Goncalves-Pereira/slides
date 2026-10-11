@@ -21,10 +21,11 @@ Characters must already exist on the initial `WorldState`. The engine does not c
 - `AFFINITY_SHIFT` updates `targetEntity` (the subject) toward `object` on `axis` by `delta`.
 - `INVENTORY_MUTATION` is `ADD` or `REMOVE` of `itemId`, `name`, and a positive `quantity`. Removing more than held fails.
 - `STATUS_EFFECT` is `APPLY` or `CLEAR`. A second `APPLY` of the same name replaces `durationScenes`. Duration is stored and not counted down.
+- `OVERRIDE_SYNC` sets the named stats to absolute values. Other stats stay as they were.
 
 ## Not in this phase
 
 - **Path identity.** Events are keyed by `eventId`. When a chapter file is renamed, a vault adapter must keep that id and update any path metadata. The reducer never uses a vault path as identity.
-- **`OVERRIDE_SYNC`.** If an author edits stat numbers in frontmatter directly, the vault layer detects drift and appends an explicit sync event. The reducer will not invent that event by itself.
+- **`OVERRIDE_SYNC`.** A chapter may record absolute stats in `overrides`. When those numbers disagree with the fold, the vault layer reports the drift. The command "append override sync" writes an `OVERRIDE_SYNC` event that sets those stats. The reducer does not invent the event, and character notes are not rewritten.
 - **Scene ticking.** Status duration needs a future event type before remaining scenes decrease.
 - **`globalFlags`.** No event writes world flags, so the state does not carry them yet.
