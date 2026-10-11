@@ -14,7 +14,8 @@
 		"forceConsistentCasingInFileNames": true,
 		"allowSyntheticDefaultImports": true,
 		"resolveJsonModule": true,
+		"jsx": "react-jsx",
 		"lib": ["ES2021", "DOM"]
 	},
-	"include": ["src/**/*.ts", "vitest.config.ts"]
+	"include": ["src/**/*.ts", "src/**/*.tsx", "vitest.config.ts"]
 }
