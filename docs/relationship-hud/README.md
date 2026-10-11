@@ -1,23 +1,19 @@
 # Relationship HUD
 
-Not started. A side panel shows canon at a chosen story coordinate.
+A side panel shows canon at one story coordinate. Scrubbing does not write a sidecar, a character note, or an event.
 
-## Purpose
+## What it does
 
-- A timeline scrubber selects a `StoryCoordinate`. The panel calls `rehydrateAt` and renders that world.
-- A character sheet shows stats, inventory, statuses, and affinities at that coordinate.
-- A relationship graph shows characters, factions, and artifacts. Edge labels are affinity axes and scores. Item and membership edges show who holds or belongs to what at that coordinate.
-- Radial charts show a fixed set of attributes for the selected character.
+- `storyStops` lists the origin and each non-tombstoned chapter coordinate on one branch, in story order, without duplicates. The scrubber is an index into that list. A branch select switches the list.
+- The view builds a ledger with `ledgerFromIndex` and calls `rehydrateAt`. A failure is a notice. The world already on screen stays there.
+- `projectSheet` shows that character's stats, inventory, statuses, and affinities. An SVG radar uses the character's stat names, sorted.
+- `projectGraph` draws character nodes, item nodes, and a node for an affinity object that is not a character. Affinity edges carry `axis` and `score`. Holds edges carry `quantity`. Nodes do not store color, motion, or score. `affinityTone` maps the score to a color and a motion name when the edge is drawn.
+- `layoutGraph` returns positions. The same graph always gets the same positions, and the input graph is left unchanged. The view does not call it. A blob worker runs the function's source and posts positions back. The worker terminates in `onClose` and again in `onunload`.
+- The panel is an Obsidian `ItemView` opened with "open relationship hud". React and React Flow render the sheet and the graph. The React root unmounts in `onClose` and any root still open unmounts in `onunload`.
+- Colors are ebony `#0B0F19`, wood `#1E1611`, metal `#D4AF37`, cyan `#00E5FF`, and violet `#A855F7`. Titles are serif. Controls are sans-serif.
 
-Visual baseline from the product note: ebony `#0B0F19`, wood `#1E1611`, metal `#D4AF37`, cyan `#00E5FF`, violet `#A855F7`. Serif titles, sans-serif controls.
+The ledger has no faction or membership event, so the graph does not invent faction nodes. Artifacts are inventory items.
 
-## Exit criteria
+## Not in this phase
 
-- Scrubbing never mutates the ledger. Moving the slider only changes the coordinate passed to `rehydrateAt`.
-- Graph layout runs off the main thread. Node and edge types are Schema-decoded. No `any`.
-- React and React Flow are added to the build only when this phase starts. The esbuild config gains a JSX transform then, not before.
-- The view is an Obsidian `ItemView`. Its React root unmounts in `onClose` and again in `onunload`.
-
-## Constraints
-
-Affinity color and motion describe the score. They are not a second copy of the score stored on the node.
+Editor blocks and audio.
