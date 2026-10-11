@@ -1,29 +1,20 @@
 # Vault lifecycle
 
-Not started. This phase indexes the vault and feeds the phase 1 `Ledger`. It does not call a model, draw a graph, or play audio.
+The vault index lives in `src/domain/vault/`. Obsidian I/O stays in `src/vault/`. Prose is not parsed.
 
-## Purpose
+## What it does
 
-Read an opinionated, configurable set of roots and turn markdown into initial state plus story events.
+- Plugin data stores the four roots. Missing data uses `Livro`, `Personagens`, `Mundo`, and `Assets`. A settings tab can change them.
+- A character note is initial state: `noteId`, `name`, optional `characterId` (defaults to `name`), and `stats`. Editing those numbers changes the initial world. Chapters never write back into character notes.
+- A chapter note is one coordinate. `order` is `chapterOrder`, with `timestamp`, `act`, and `branchId` (default `main`). `sceneIndex` and `beatIndex` are 0. Optional `overrides` are absolute stats.
+- Events live beside the chapter as `Cap1.events.json`, keyed by `eventId`. A missing `noteId` is skipped until the adapter writes one id. A second metadata event does not write another.
+- `Mundo` and `Assets` are listed only. They are not story state.
+- Rename changes the path and moves the sidecar file. `noteId` and `eventId` stay.
+- Delete tombstones that chapter's sidecar and leaves every other sidecar as it was.
+- Chapter `overrides` that disagree with `rehydrateAt` are reported. The command "append override sync" writes one `OVERRIDE_SYNC` event. Nothing appends it on its own.
 
-Default roots:
+Listeners are `metadataCache` `changed`, plus vault `rename` and `delete`, each through `registerEvent`.
 
-- `/Livro` — manuscript chapters and scenes
-- `/Personagens` — character profiles and initial stat blocks
-- `/Mundo` — spells, artifacts, factions, regions, lore
-- `/Assets` — portraits, maps, and sound files
+## Not in this phase
 
-Chapter frontmatter carries `order`, `timestamp`, `act`, and `branchId`. Character notes supply the initial `WorldState` passed to `reduceWorld`. Events live in a JSON sidecar keyed by `eventId`, not by file path.
-
-## Exit criteria
-
-- A settings panel (or plugin data) can change the four roots.
-- `metadataCache` and vault modify/rename/delete listeners rebuild only the affected notes.
-- Rename keeps the note's stable id so historical events still resolve.
-- Frontmatter that disagrees with the folded state is reported as drift and can append an `OVERRIDE_SYNC` event. Silent overwrite is not allowed.
-- Every listener is registered with `this.registerEvent` and is gone after `onunload`.
-- Deleting a chapter removes or tombstones its events without rewriting the rest of the vault.
-
-## Constraints
-
-No Git operations inside the vault. No direct mutation of character stat blocks when a later chapter changes them. State at a coordinate always comes from `rehydrateAt`.
+LLM extraction, editor blocks, the relationship HUD, and audio.

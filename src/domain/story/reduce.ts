@@ -22,6 +22,7 @@ type StatChange = Extract<StoryEvent, { type: 'STAT_CHANGE' }>
 type AffinityShift = Extract<StoryEvent, { type: 'AFFINITY_SHIFT' }>
 type InventoryMutation = Extract<StoryEvent, { type: 'INVENTORY_MUTATION' }>
 type StatusEffect = Extract<StoryEvent, { type: 'STATUS_EFFECT' }>
+type OverrideSync = Extract<StoryEvent, { type: 'OVERRIDE_SYNC' }>
 
 export type ReduceError = UnknownEntity | InsufficientQuantity
 
@@ -198,6 +199,27 @@ const statusFrom = (event: StatusEffect): ActiveStatus =>
 		? { name: event.name }
 		: { name: event.name, durationScenes: event.durationScenes }
 
+const applyOverride = (
+	world: WorldState,
+	event: OverrideSync,
+): Effect.Effect<WorldState, UnknownEntity> =>
+	Effect.gen(function* () {
+		const character = yield* requireCharacter(
+			world,
+			event.targetEntity,
+			event.eventId,
+		)
+		const stats: { [stat: string]: number } = { ...character.stats }
+		for (const [stat, value] of Object.entries(event.stats)) {
+			stats[stat] = value
+		}
+		return withCharacter(world, {
+			...character,
+			stats,
+			lastUpdatedCoordinate: event.coordinate,
+		})
+	})
+
 const applyEvent = (
 	world: WorldState,
 	event: StoryEvent,
@@ -211,6 +233,8 @@ const applyEvent = (
 			return applyInventory(world, event)
 		case 'STATUS_EFFECT':
 			return applyStatus(world, event)
+		case 'OVERRIDE_SYNC':
+			return applyOverride(world, event)
 	}
 }
 
