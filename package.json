@@ -1,7 +1,7 @@
 {
-	"name": "slides",
+	"name": "writing",
 	"version": "1.0.0",
-	"description": "Obsidian plugin shell.",
+	"description": "Event-sourced canon for novels and LitRPG.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

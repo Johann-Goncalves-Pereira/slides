@@ -1,8 +1,8 @@
 {
-	"id": "slides",
-	"name": "Slides",
+	"id": "writing",
+	"name": "Writing",
 	"version": "1.0.0",
 	"minAppVersion": "1.0.0",
-	"description": "Obsidian plugin shell.",
+	"description": "Event-sourced canon for novels and LitRPG.",
 	"isDesktopOnly": false
 }

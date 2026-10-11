@@ -1,0 +1,52 @@
+#!/usr/bin/env sh
+# React / JS-TS validate. Prefer package scripts if they already exist.
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$ROOT"
+
+if command -v pnpm >/dev/null 2>&1 && [ -f pnpm-lock.yaml ]; then
+	PM="pnpm"
+elif command -v npm >/dev/null 2>&1; then
+	PM="npm"
+else
+	PM="npx"
+fi
+
+run() {
+	if [ "$PM" = "pnpm" ]; then
+		pnpm exec "$@"
+	elif [ "$PM" = "npm" ]; then
+		npx "$@"
+	else
+		npx "$@"
+	fi
+}
+
+if [ -f biome.json ] || [ -f biome.jsonc ]; then
+	run biome check .
+fi
+
+if [ -f eslint.config.js ] || [ -f eslint.config.mjs ] || [ -f eslint.config.cjs ]; then
+	# --max-warnings 0 is the strict profile. Adopt reports warnings and still fails on errors.
+	if [ -f .cursor/quality-bar.json ] && grep -Eq '"profile"[[:space:]]*:[[:space:]]*"strict"' .cursor/quality-bar.json; then
+		run eslint . --max-warnings 0
+	else
+		run eslint .
+	fi
+fi
+
+run tsc --noEmit --skipLibCheck
+
+# Unit tests — prefer existing script
+if [ -f package.json ]; then
+	if grep -q '"test"' package.json; then
+		if [ "$PM" = "pnpm" ]; then
+			pnpm test --if-present
+		else
+			npm test --if-present
+		fi
+	fi
+fi
+
+echo "validate (react): ok"
