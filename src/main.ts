@@ -11,6 +11,7 @@ import {
 } from './domain/extract/queue'
 import { runLoad } from './domain/manifest'
 import { defaultPluginSettings } from './domain/vault/roots'
+import { closeHudViews, HUD_VIEW_TYPE, WritingHudView } from './hud/view'
 import { loadStoredSettings, obsidianPort, runVault } from './vault/obsidian'
 import { ProposalModal } from './vault/proposal-modal'
 import { createSession, type VaultSession } from './vault/session'
@@ -108,6 +109,20 @@ export default class WritingPlugin extends Plugin {
 			queue.enqueue(request).pipe(Effect.provideService(ModelClient, model))
 		const lastText = new Map<string, string>()
 		this.addSettingTab(new WritingSettingTab(this.app, this, session))
+		this.registerView(HUD_VIEW_TYPE, leaf => new WritingHudView(leaf, session))
+		this.addCommand({
+			id: 'open-relationship-hud',
+			name: 'open relationship hud',
+			callback: () => {
+				void this.app.workspace
+					.getLeaf(true)
+					.setViewState({ type: HUD_VIEW_TYPE, active: true })
+					.catch((cause: unknown) => {
+						console.error(cause)
+						new Notice('Could not open the relationship HUD.')
+					})
+			},
+		})
 		this.addCommand({
 			id: 'append-override-sync',
 			name: 'append override sync',
@@ -225,6 +240,7 @@ export default class WritingPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		closeHudViews()
 		const closeExtraction = this.closeExtraction
 		if (closeExtraction === undefined) return
 		void Effect.runPromise(closeExtraction).catch((cause: unknown) => {
