@@ -21,6 +21,8 @@ describe('createPlayback', () => {
 				events.push(`start:${start.deck}:${start.file}`)
 			},
 			startOverlay: () => undefined,
+			overlayGain: () => undefined,
+			master: () => undefined,
 			gain: gain => {
 				events.push(`gain:${gain.deck}:${gain.to}`)
 			},
@@ -54,6 +56,8 @@ describe('createPlayback', () => {
 				events.push(start.file)
 			},
 			startOverlay: () => undefined,
+			overlayGain: () => undefined,
+			master: () => undefined,
 			gain: () => undefined,
 			stop: () => undefined,
 			stopOverlay: () => undefined,
@@ -77,6 +81,41 @@ describe('createPlayback', () => {
 		expect(events).toEqual(['ambient_dark_forest.mp3'])
 		expect(playback.snapshot().decks.a.file).toBe('ambient_dark_forest.mp3')
 		expect(notices).toEqual(['Could not read tavern.mp3.'])
+	})
+
+	it('sets one overlay volume and the master volume', async () => {
+		const events: string[] = []
+		const port: PlaybackPort = {
+			now: () => 1,
+			load: () => Effect.void,
+			start: () => undefined,
+			startOverlay: (file, _at, volume) => {
+				events.push(`start:${file}:${volume}`)
+			},
+			overlayGain: (file, to) => {
+				events.push(`overlay:${file}:${to}`)
+			},
+			master: to => {
+				events.push(`master:${to}`)
+			},
+			gain: () => undefined,
+			stop: () => undefined,
+			stopOverlay: () => undefined,
+			close: () => undefined,
+		}
+		const playback = createPlayback(port, () => 'Assets')
+		await Effect.runPromise(playback.overlay('rain.mp3', true))
+		await Effect.runPromise(playback.setOverlayVolume('rain.mp3', 0.2))
+		await Effect.runPromise(playback.setMasterVolume(0.5))
+		expect(events).toEqual([
+			'start:rain.mp3:0.7',
+			'overlay:rain.mp3:0.2',
+			'master:0.5',
+		])
+		expect(playback.snapshot().overlays).toEqual([
+			{ file: 'rain.mp3', volume: 0.2 },
+		])
+		expect(playback.snapshot().master).toBe(0.5)
 	})
 })
 

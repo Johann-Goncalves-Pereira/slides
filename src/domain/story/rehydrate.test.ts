@@ -135,4 +135,36 @@ describe('rehydrateAt', () => {
 		expect((await read(alternate)).characters.Arthur?.stats.HP).toBe(200)
 		expect(await read(alternate)).toEqual(await fold(alternate))
 	})
+
+	it('matches a full fold after ten thousand stat events', async () => {
+		const initial = await Effect.runPromise(decodeWorldState(arthurWorld))
+		const events = await Effect.runPromise(
+			Effect.all(
+				Array.from({ length: 10_000 }, (_, index) =>
+					stat(
+						`evt-${index}`,
+						'main',
+						Math.floor(index / 10) + 1,
+						index % 10,
+						index + 1,
+						index % 2 === 0 ? 1 : -1,
+					),
+				),
+			),
+		)
+		const snapshots = await Effect.runPromise(
+			buildSnapshots(initial, events, manuscriptSnapshotPolicy),
+		)
+		const ledger = makeMemoryLedger({
+			initialState: initial,
+			events,
+			snapshots,
+		})
+		const ending = at('main', 1000, 9, 10_000)
+		const read = await Effect.runPromise(
+			rehydrateAt(ending).pipe(Effect.provideService(Ledger, ledger)),
+		)
+		const folded = await Effect.runPromise(reduceWorld(initial, events))
+		expect(read).toEqual(folded)
+	})
 })

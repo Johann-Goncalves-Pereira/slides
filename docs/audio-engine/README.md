@@ -9,7 +9,7 @@ Reading view crossfades ambience when a cue crosses the middle of the viewport. 
 - `planCrossfade` schedules two decks. From silence, one deck starts at the cue volume. A new file ramps the playing deck to 0 and the idle deck to the new volume, starting at the audio clock time and lasting the cue's crossfade. The same file changes volume only. Loop comes from the cue.
 - The Web Audio edge applies that plan with `linearRampToValueAtTime`. A missing file or a decode failure is an `AudioError`, a notice, and the previous cue keeps playing. Buffers load from `${assets}/${file}`.
 - Reading view inserts a sentinel for each cue, because comments are not in the rendered DOM. An `IntersectionObserver` whose root is a band at the vertical center plays that cue. Leaving preview, or opening another note, releases the reading holder and disconnects those observers.
-- The audio leaf lists the active note's cues and can loop another asset as an overlay. Overlays are not a second current cue. Closing the leaf releases the leaf holder and stops its overlays. If reading view is still holding the cue, that cue keeps playing.
+- The audio leaf lists the active note's cues and can loop another asset as an overlay. Overlays are not a second current cue. Each running overlay has a volume slider, and the leaf has a master slider from 0 through 1. Closing the leaf releases the leaf holder and stops its overlays. If reading view is still holding the cue, that cue keeps playing.
 - `onunload` stops playback, disconnects every node, and closes the `AudioContext`.
 
 Neither surface writes a sidecar or a note.

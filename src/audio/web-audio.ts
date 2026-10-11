@@ -13,6 +13,7 @@ type Nodes = {
 
 type LiveAudio = {
 	readonly context: AudioContext
+	readonly master: GainNode
 	readonly buffers: Map<string, AudioBuffer>
 	readonly decks: { a?: Nodes; b?: Nodes }
 	readonly overlays: Map<string, Nodes>
@@ -33,8 +34,13 @@ export const createAudioEngine = (
 	let live: LiveAudio | undefined
 	const open = (): LiveAudio => {
 		if (live !== undefined) return live
+		const context = new AudioContext()
+		const master = context.createGain()
+		master.gain.setValueAtTime(1, context.currentTime)
+		master.connect(context.destination)
 		live = {
-			context: new AudioContext(),
+			context,
+			master,
 			buffers: new Map(),
 			decks: {},
 			overlays: new Map(),
@@ -59,7 +65,7 @@ export const createAudioEngine = (
 		const gain = audio.context.createGain()
 		gain.gain.setValueAtTime(volume, at)
 		source.connect(gain)
-		gain.connect(audio.context.destination)
+		gain.connect(audio.master)
 		source.start(at)
 		resume(audio)
 		return { source, gain, stopped: false }
@@ -108,7 +114,7 @@ export const createAudioEngine = (
 				if (buffer === undefined) return
 				replace(start.deck, connect(audio, buffer, start.loop, start.at, 0))
 			},
-			startOverlay: (file, at) => {
+			startOverlay: (file, at, volume) => {
 				const audio = open()
 				const buffer = audio.buffers.get(`${assets()}/${file}`)
 				if (buffer === undefined) return
@@ -118,7 +124,17 @@ export const createAudioEngine = (
 					previous.source.disconnect()
 					previous.gain.disconnect()
 				}
-				audio.overlays.set(file, connect(audio, buffer, true, at, 0.7))
+				audio.overlays.set(file, connect(audio, buffer, true, at, volume))
+			},
+			overlayGain: (file, to) => {
+				const audio = live
+				const overlay = audio?.overlays.get(file)
+				if (overlay === undefined || audio === undefined) return
+				overlay.gain.gain.setValueAtTime(to, audio.context.currentTime)
+			},
+			master: to => {
+				const audio = open()
+				audio.master.gain.setValueAtTime(to, audio.context.currentTime)
 			},
 			gain: change => {
 				const deck = open().decks[change.deck]
@@ -151,6 +167,7 @@ export const createAudioEngine = (
 					overlay.source.disconnect()
 					overlay.gain.disconnect()
 				}
+				live.master.disconnect()
 				const closing = live.context.close()
 				void closing.catch((cause: unknown) => {
 					console.error(cause)
