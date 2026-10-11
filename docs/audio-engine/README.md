@@ -1,26 +1,19 @@
 # Audio engine
 
-Not started. Reading view can crossfade ambience as the reader moves through a chapter. A docked leaf can cue the same tracks by hand.
+Reading view crossfades ambience when a cue crosses the middle of the viewport. The command "open audio" fires those same cues and extra looping overlays. Both use one engine and one current cue.
 
-## Purpose
+## What it does
 
-Authors mark a cue with an HTML comment:
+- A cue is an HTML comment: `<!-- audio: ambient_dark_forest.mp3, volume: 0.7, crossfade: 2500 -->`. `loop` is optional and defaults to `true`. Volume is from 0 through 1. Crossfade is a non-negative number of milliseconds. The file is one path segment under the assets root.
+- `parseCues` returns the valid cues in order. A bad audio comment is a `CueError` and a notice. It does not drop the valid cues and it does not throw.
+- `planCrossfade` schedules two decks. From silence, one deck starts at the cue volume. A new file ramps the playing deck to 0 and the idle deck to the new volume, starting at the audio clock time and lasting the cue's crossfade. The same file changes volume only. Loop comes from the cue.
+- The Web Audio edge applies that plan with `linearRampToValueAtTime`. A missing file or a decode failure is an `AudioError`, a notice, and the previous cue keeps playing. Buffers load from `${assets}/${file}`.
+- Reading view inserts a sentinel for each cue, because comments are not in the rendered DOM. An `IntersectionObserver` whose root is a band at the vertical center plays that cue. Leaving preview, or opening another note, releases the reading holder and disconnects those observers.
+- The audio leaf lists the active note's cues and can loop another asset as an overlay. Overlays are not a second current cue. Closing the leaf releases the leaf holder and stops its overlays. If reading view is still holding the cue, that cue keeps playing.
+- `onunload` stops playback, disconnects every node, and closes the `AudioContext`.
 
-```html
-<!-- audio: ambient_dark_forest.mp3, volume: 0.7, crossfade: 2500 -->
-```
+Neither surface writes a sidecar or a note.
 
-In reading view, a cue that crosses the vertical center of the viewport fades the playing deck out and the next deck in. Two decks are enough. Loop and volume come from the cue. Files resolve under the vault's `/Assets` root.
+## Not in this phase
 
-The manual leaf mixes channels, overlays (rain, tavern, battle), and fires the same cues without scrolling.
-
-## Exit criteria
-
-- Cues are parsed with Schema. A bad comment is ignored and reported. It does not throw into the markdown renderer.
-- `IntersectionObserver` instances, audio nodes, and buffer loads are registered on the plugin and released in `onunload` and when the leaf closes.
-- Crossfade uses the Web Audio API. Gain ramps are scheduled on the audio clock. The code does not sleep to fake a fade.
-- Closing the note or leaving reading view stops playback.
-
-## Constraints
-
-The soundboard and the reading-view observer share one engine. They do not keep separate notions of the current track.
+Editor blocks.
