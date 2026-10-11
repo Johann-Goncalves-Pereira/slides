@@ -1,0 +1,19 @@
+{
+	"name": "eslint-plugin-quality-bar",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "index.js",
+	"exports": {
+		".": "./index.js"
+	},
+	"scripts": {
+		"test": "node --test rules/*.test.js"
+	},
+	"peerDependencies": {
+		"eslint": ">=9"
+	},
+	"devDependencies": {
+		"eslint": "^9.39.0"
+	}
+}

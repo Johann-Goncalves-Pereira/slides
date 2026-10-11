@@ -1,0 +1,3 @@
+`import $imports from "zod"` as $imp where {
+	register_diagnostic(span=$imp, message="Use effect/Schema instead of Zod.", severity="error")
+}
