@@ -281,4 +281,83 @@ describe('createSession', () => {
 		expect(noteIdWrites).toEqual([])
 		expect(text.has('Personagens/Arthur.md')).toBe(false)
 	})
+
+	it('drops one ledger event from its sidecar and leaves the chapter note', async () => {
+		const { port, markdown, text, notices } = memoryPort()
+		markdown.set('Personagens/Arthur.md', {
+			noteId: 'note-arthur',
+			name: 'Arthur',
+			stats: { HP: 100 },
+		})
+		const chapter = {
+			noteId: 'note-cap1',
+			order: 1,
+			timestamp: 10,
+			act: 'I',
+		}
+		markdown.set('Livro/Cap1.md', chapter)
+		const heal = {
+			eventId: 'evt-heal',
+			targetEntity: 'Arthur',
+			coordinate: damage.coordinate,
+			type: 'STAT_CHANGE' as const,
+			deltas: { HP: 5 },
+		}
+		text.set(
+			sidecarPath('Livro/Cap1.md'),
+			JSON.stringify({
+				noteId: 'note-cap1',
+				tombstoned: false,
+				events: [damage, heal],
+			}),
+		)
+		text.set(
+			sidecarPath('Livro/Buried.md'),
+			JSON.stringify({
+				noteId: 'note-buried',
+				tombstoned: true,
+				events: [
+					{
+						eventId: 'evt-buried',
+						targetEntity: 'Arthur',
+						coordinate: damage.coordinate,
+						type: 'STAT_CHANGE',
+						deltas: { HP: -1 },
+					},
+				],
+			}),
+		)
+		markdown.set('Livro/Buried.md', {
+			noteId: 'note-buried',
+			order: 2,
+			timestamp: 20,
+			act: 'I',
+		})
+		const session = createSession(port)
+		await Effect.runPromise(session.load())
+		await Effect.runPromise(session.removeEvent('evt-heal'))
+		const written = text.get(sidecarPath('Livro/Cap1.md'))
+		expect(typeof written).toBe('string')
+		if (typeof written !== 'string') return
+		const parsed: unknown = JSON.parse(written)
+		expect(parsed).toMatchObject({
+			events: [expect.objectContaining({ eventId: 'evt-damage' })],
+		})
+		expect(text.has('Livro/Cap1.md')).toBe(false)
+		expect(markdown.get('Livro/Cap1.md')).toEqual(chapter)
+		const indexed = session.index().byId.get('note-cap1')
+		expect(indexed?.kind).toBe('chapter')
+		if (indexed?.kind !== 'chapter') return
+		expect(indexed.sidecar.events.map(event => event.eventId)).toEqual([
+			'evt-damage',
+		])
+		const buriedBefore = text.get(sidecarPath('Livro/Buried.md'))
+		await Effect.runPromise(session.removeEvent('evt-buried'))
+		await Effect.runPromise(session.removeEvent('evt-missing'))
+		expect(text.get(sidecarPath('Livro/Buried.md'))).toBe(buriedBefore)
+		expect(notices).toEqual([
+			'That event is not in the ledger.',
+			'That event is not in the ledger.',
+		])
+	})
 })

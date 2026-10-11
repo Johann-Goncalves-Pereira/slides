@@ -1,4 +1,4 @@
-import { Duration, Effect, Fiber, type Scope } from 'effect'
+import { Duration, Effect, Fiber, Option, type Scope } from 'effect'
 import type { StoryCoordinate } from '../story/coordinate'
 import type { StoryEvent } from '../story/event'
 import type { EventSidecar } from '../vault/frontmatter'
@@ -74,9 +74,14 @@ export const makeExtractionQueue = (
 
 		const enqueue: ExtractionQueue['enqueue'] = request =>
 			Effect.gen(function* () {
+				const current = latest.get(request.chapterPath)
+				const running = fibers.get(request.chapterPath)
+				if (current?.text === request.text && running !== undefined) {
+					const done = yield* Fiber.poll(running)
+					if (Option.isNone(done)) return
+				}
 				latest.set(request.chapterPath, request)
-				const previous = fibers.get(request.chapterPath)
-				if (previous !== undefined) yield* Fiber.interrupt(previous)
+				if (running !== undefined) yield* Fiber.interrupt(running)
 				const fiber = yield* Effect.forkIn(worker(request), scope)
 				fibers.set(request.chapterPath, fiber)
 			})

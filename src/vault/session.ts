@@ -1,4 +1,5 @@
 import { Effect, type ParseResult } from 'effect'
+import { withoutEvent } from '../domain/blocks/without-event'
 import type { RehydrationError } from '../domain/story/errors'
 import type { ReduceError } from '../domain/story/reduce'
 import { appendOverrideSync, findStatDrift } from '../domain/vault/drift'
@@ -93,6 +94,7 @@ export type VaultSession = {
 		path: string,
 		sidecar: EventSidecar,
 	) => Effect.Effect<void, SessionError>
+	readonly removeEvent: (eventId: string) => Effect.Effect<void, SessionError>
 }
 
 const under = (path: string, root: string): boolean =>
@@ -413,6 +415,31 @@ export const createSession = (port: VaultPort): VaultSession => {
 			})
 		})
 
+	const removeEvent: VaultSession['removeEvent'] = eventId =>
+		Effect.gen(function* () {
+			const owner = [...index.byId.values()].find(
+				(note): note is IndexedChapter =>
+					note.kind === 'chapter' &&
+					!note.sidecar.tombstoned &&
+					note.sidecar.events.some(event => event.eventId === eventId),
+			)
+			if (owner === undefined) {
+				port.notice('That event is not in the ledger.')
+				return
+			}
+			const dropped = yield* Effect.either(
+				withoutEvent(owner.sidecar.events, eventId),
+			)
+			if (dropped._tag === 'Left') {
+				port.notice('That event is not in the ledger.')
+				return
+			}
+			yield* writeChapterSidecar(owner.path, {
+				...owner.sidecar,
+				events: dropped.right,
+			})
+		})
+
 	return {
 		index: () => index,
 		roots: vaultRoots,
@@ -426,5 +453,6 @@ export const createSession = (port: VaultPort): VaultSession => {
 		setModelField,
 		setPauseMillis,
 		writeChapterSidecar,
+		removeEvent,
 	}
 }

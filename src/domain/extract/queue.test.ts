@@ -87,6 +87,43 @@ describe('ExtractionQueue', () => {
 		)
 	})
 
+	it('keeps the pause when the same chapter text is enqueued again', async () => {
+		const calls: string[] = []
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const scope = yield* Scope.make()
+				const queue = yield* makeExtractionQueue(scope, {
+					readSidecar: () =>
+						Effect.succeed({
+							noteId: 'note-cap1',
+							tombstoned: false,
+							events: [],
+						}),
+					writeSidecar: () => Effect.void,
+					notice: () => undefined,
+					onProposal: () => undefined,
+				})
+				const model = {
+					propose: (text: string) =>
+						Effect.sync(() => {
+							calls.push(text)
+							return { events: [] }
+						}),
+				}
+				yield* queue
+					.enqueue(request('same chapter'))
+					.pipe(Effect.provideService(ModelClient, model))
+				yield* TestClock.adjust(Duration.millis(20_000))
+				yield* queue
+					.enqueue(request('same chapter'))
+					.pipe(Effect.provideService(ModelClient, model))
+				yield* TestClock.adjust(Duration.millis(10_000))
+				expect(calls).toEqual(['same chapter'])
+				yield* Scope.close(scope, Exit.void)
+			}).pipe(Effect.provide(TestContext.TestContext)),
+		)
+	})
+
 	it('appends on accept and writes nothing on reject or a second accept', async () => {
 		let sidecar: EventSidecar = {
 			noteId: 'note-cap1',
