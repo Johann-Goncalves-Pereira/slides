@@ -1,12 +1,13 @@
 import { type Context, Effect, type ParseResult } from 'effect'
-import type { StoryCoordinate } from '../story/coordinate'
+import { compareCoordinates, type StoryCoordinate } from '../story/coordinate'
 import type { StoryEvent } from '../story/event'
 import { type Ledger, makeMemoryLedger } from '../story/ledger'
 import type { ReduceError } from '../story/reduce'
 import { buildSnapshots, manuscriptSnapshotPolicy } from '../story/snapshot'
-import { decodeWorldState } from '../story/state'
+import { decodeWorldState, type WorldEntity } from '../story/state'
 import {
 	DuplicateCharacter,
+	DuplicateEntity,
 	DuplicateNoteId,
 	MissingNoteId,
 	SidecarMismatch,
@@ -17,7 +18,9 @@ import {
 	decodeChapterNote,
 	decodeCharacterNote,
 	decodeEventSidecar,
+	decodeMundoEntity,
 	type EventSidecar,
+	mundoHasKind,
 	readNoteId,
 } from './frontmatter'
 
@@ -66,7 +69,20 @@ export type IndexedListing = {
 	readonly noteId: string
 }
 
-export type IndexedNote = IndexedCharacter | IndexedChapter | IndexedListing
+export type IndexedEntity = {
+	readonly kind: 'entity'
+	readonly path: string
+	readonly noteId: string
+	readonly name: string
+	readonly entityId: string
+	readonly entityKind: WorldEntity['kind']
+}
+
+export type IndexedNote =
+	| IndexedCharacter
+	| IndexedChapter
+	| IndexedListing
+	| IndexedEntity
 
 export type VaultIndex = {
 	readonly byId: ReadonlyMap<string, IndexedNote>
@@ -79,6 +95,7 @@ export type IndexError =
 	| DuplicateNoteId
 	| SidecarMismatch
 	| DuplicateCharacter
+	| DuplicateEntity
 
 export const emptyVaultIndex = (): VaultIndex => ({
 	byId: new Map(),
@@ -171,6 +188,27 @@ const decodeIndexed = (
 		return decodeChapterNote(file.frontmatter).pipe(
 			Effect.flatMap(note => chapterFrom(file, note)),
 		)
+	}
+	if (file.kind === 'mundo') {
+		return Effect.gen(function* () {
+			const typed = yield* mundoHasKind(file.frontmatter)
+			if (!typed) {
+				return {
+					kind: 'mundo' as const,
+					path: file.path,
+					noteId,
+				}
+			}
+			const note = yield* decodeMundoEntity(file.frontmatter)
+			return {
+				kind: 'entity' as const,
+				path: file.path,
+				noteId: note.noteId,
+				name: note.name,
+				entityId: note.entityId,
+				entityKind: note.kind,
+			}
+		})
 	}
 	return Effect.succeed({
 		kind: file.kind,
@@ -267,6 +305,13 @@ export const ledgerFromIndex = (
 				lastUpdatedCoordinate: StoryCoordinate
 			}
 		} = {}
+		const entities: {
+			[entityId: string]: {
+				entityId: string
+				name: string
+				kind: WorldEntity['kind']
+			}
+		} = {}
 		const events: StoryEvent[] = []
 		for (const note of index.byId.values()) {
 			if (note.kind === 'character') {
@@ -285,11 +330,21 @@ export const ledgerFromIndex = (
 					lastUpdatedCoordinate: origin,
 				}
 			}
+			if (note.kind === 'entity') {
+				if (entities[note.entityId] !== undefined) {
+					return yield* new DuplicateEntity({ entityId: note.entityId })
+				}
+				entities[note.entityId] = {
+					entityId: note.entityId,
+					name: note.name,
+					kind: note.entityKind,
+				}
+			}
 			if (note.kind === 'chapter' && !note.sidecar.tombstoned) {
 				events.push(...note.sidecar.events)
 			}
 		}
-		const initialState = yield* decodeWorldState({ characters })
+		const initialState = yield* decodeWorldState({ characters, entities })
 		const snapshots = yield* buildSnapshots(
 			initialState,
 			events,
@@ -297,3 +352,19 @@ export const ledgerFromIndex = (
 		)
 		return makeMemoryLedger({ initialState, events, snapshots })
 	})
+
+export const eventCoordinates = (
+	index: VaultIndex,
+	at: StoryCoordinate,
+): readonly StoryCoordinate[] => {
+	const scenes: StoryCoordinate[] = []
+	for (const note of index.byId.values()) {
+		if (note.kind !== 'chapter' || note.sidecar.tombstoned) continue
+		for (const event of note.sidecar.events) {
+			if (event.coordinate.branchId !== at.branchId) continue
+			if (compareCoordinates(event.coordinate, at) > 0) continue
+			scenes.push(event.coordinate)
+		}
+	}
+	return scenes
+}

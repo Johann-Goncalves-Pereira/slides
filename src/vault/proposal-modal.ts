@@ -21,6 +21,15 @@ const describeEvent = (event: StoryEvent): string => {
 				: ` for ${event.durationScenes} scenes`
 		return `STATUS_EFFECT ${event.op} ${event.name} on ${event.targetEntity}${duration}`
 	}
+	if (event.type === 'FLAG_SET') {
+		return `FLAG_SET ${event.flag} ${event.value}`
+	}
+	if (event.type === 'MEMBERSHIP') {
+		return `MEMBERSHIP ${event.op} ${event.factionId} for ${event.targetEntity}`
+	}
+	if (event.type === 'LOCATION_SET') {
+		return `LOCATION_SET ${event.targetEntity} ${event.regionId}`
+	}
 	const stats = Object.entries(event.stats)
 		.map(([stat, value]) => `${stat} ${value}`)
 		.join(', ')

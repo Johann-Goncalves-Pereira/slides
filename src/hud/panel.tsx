@@ -1,4 +1,11 @@
-import { type Edge, type Node, ReactFlow } from '@xyflow/react'
+import {
+	type Edge,
+	Handle,
+	type Node,
+	type NodeProps,
+	Position,
+	ReactFlow,
+} from '@xyflow/react'
 import { Effect } from 'effect'
 import { type ChangeEvent, useEffect, useState } from 'react'
 import { affinityTone, type HudGraph } from '../domain/hud/graph'
@@ -14,6 +21,8 @@ export type HudSnapshot = {
 		readonly x: number
 		readonly y: number
 	}[]
+	readonly at: StoryCoordinate
+	readonly scenes: readonly StoryCoordinate[]
 }
 
 export type HudActions = {
@@ -79,6 +88,48 @@ const Radar = ({
 	)
 }
 
+const frame = (border: string, selected: boolean) => ({
+	background: '#1E1611',
+	color: '#D4AF37',
+	border: `1px solid ${selected ? '#00E5FF' : border}`,
+	borderRadius: 4,
+	padding: '8px 12px',
+	minWidth: 120,
+})
+
+const WritingNode = ({
+	data,
+	selected,
+	border,
+}: {
+	readonly data: { readonly label?: unknown }
+	readonly selected?: boolean
+	readonly border: string
+}) => (
+	<div style={frame(border, selected === true)}>
+		<Handle type='target' position={Position.Left} />
+		{typeof data.label === 'string' ? data.label : ''}
+		<Handle type='source' position={Position.Right} />
+	</div>
+)
+
+const nodeOf =
+	(border: string) =>
+	({ data, selected }: NodeProps) => (
+		<WritingNode data={data} selected={selected} border={border} />
+	)
+
+const nodeTypes = {
+	character: nodeOf('#00E5FF'),
+	faction: nodeOf('#D4AF37'),
+	artifact: nodeOf('#A855F7'),
+	region: nodeOf('#00E5FF'),
+	spell: nodeOf('#A855F7'),
+	lore: nodeOf('#D4AF37'),
+	item: nodeOf('#D4AF37'),
+	object: nodeOf('#D4AF37'),
+}
+
 const GraphView = ({
 	snapshot,
 	selectedId,
@@ -95,13 +146,10 @@ const GraphView = ({
 		return [
 			{
 				id: hud.id,
+				type: hud.kind,
 				position: { x: position.x, y: position.y },
 				data: { label: hud.label },
-				style: {
-					background: '#1E1611',
-					color: '#D4AF37',
-					border: selected ? '1px solid #00E5FF' : '1px solid #D4AF37',
-				},
+				selected,
 			},
 		]
 	})
@@ -117,12 +165,30 @@ const GraphView = ({
 				style: { stroke: tone.color },
 			}
 		}
+		if (edge.kind === 'holds') {
+			return {
+				id: edge.id,
+				source: edge.source,
+				target: edge.target,
+				label: `holds ${edge.quantity}`,
+				style: { stroke: '#D4AF37' },
+			}
+		}
+		if (edge.kind === 'member') {
+			return {
+				id: edge.id,
+				source: edge.source,
+				target: edge.target,
+				label: 'member',
+				style: { stroke: '#D4AF37' },
+			}
+		}
 		return {
 			id: edge.id,
 			source: edge.source,
 			target: edge.target,
-			label: `holds ${edge.quantity}`,
-			style: { stroke: '#D4AF37' },
+			label: 'present',
+			style: { stroke: '#00E5FF' },
 		}
 	})
 	return (
@@ -130,6 +196,7 @@ const GraphView = ({
 			<ReactFlow
 				nodes={nodes}
 				edges={edges}
+				nodeTypes={nodeTypes}
 				onNodeClick={(_event, node) => {
 					onSelect(node.id)
 				}}
@@ -202,7 +269,14 @@ export const HudPanel = ({
 	const sheetResult =
 		snapshot === undefined || characterId === undefined
 			? undefined
-			: Effect.runSync(Effect.either(projectSheet(snapshot.world, characterId)))
+			: Effect.runSync(
+					Effect.either(
+						projectSheet(snapshot.world, characterId, {
+							at: snapshot.at,
+							scenes: snapshot.scenes,
+						}),
+					),
+				)
 	const sheet = sheetResult?._tag === 'Right' ? sheetResult.right : undefined
 	const selectedId =
 		characterId === undefined ? undefined : `character:${characterId}`
@@ -278,6 +352,25 @@ export const HudPanel = ({
 								{affinity.axis} {affinity.score} toward {affinity.object}
 							</li>
 						))}
+					</ul>
+					<ul>
+						{sheet.factions.map(faction => (
+							<li key={faction}>{faction}</li>
+						))}
+					</ul>
+					{sheet.location === undefined ? null : <p>{sheet.location}</p>}
+					<ul>
+						{Object.entries(sheet.flags)
+							.sort(([left], [right]) => {
+								if (left < right) return -1
+								if (left > right) return 1
+								return 0
+							})
+							.map(([flag, value]) => (
+								<li key={flag}>
+									{flag} {value ? 'true' : 'false'}
+								</li>
+							))}
 					</ul>
 				</section>
 			)}

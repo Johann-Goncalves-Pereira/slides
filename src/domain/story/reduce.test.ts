@@ -212,7 +212,17 @@ describe('reduceWorld', () => {
 			reduceWorld(initial, [applied, replaced]),
 		)
 		expect(poisoned.characters.Arthur?.activeStatuses).toEqual([
-			{ name: 'Poisoned', durationScenes: 1 },
+			{
+				name: 'Poisoned',
+				durationScenes: 1,
+				since: {
+					branchId: 'main',
+					chapterOrder: 1,
+					sceneIndex: 1,
+					beatIndex: 2,
+					timestamp: 141,
+				},
+			},
 		])
 		const cured = await Effect.runPromise(reduceWorld(poisoned, [cleared]))
 		expect(cured.characters.Arthur?.activeStatuses).toEqual([])
@@ -320,5 +330,170 @@ describe('reduceWorld', () => {
 		const world = await Effect.runPromise(reduceWorld(initial, events))
 		expect(world.characters.Arthur?.stats.HP).toBe(50)
 		expect(world.characters.Arthur?.stats.MP).toBe(5)
+	})
+
+	it('sets a world flag and replaces it', async () => {
+		const initial = await Effect.runPromise(decodeWorldState(arthurWorld))
+		const events = [
+			await Effect.runPromise(
+				decodeStoryEvent({
+					eventId: 'evt-flag',
+					coordinate: coordinate(1, 180),
+					type: 'FLAG_SET',
+					flag: 'war',
+					value: false,
+				}),
+			),
+			await Effect.runPromise(
+				decodeStoryEvent({
+					eventId: 'evt-flag-again',
+					coordinate: coordinate(2, 181),
+					type: 'FLAG_SET',
+					flag: 'war',
+					value: true,
+				}),
+			),
+		]
+		const world = await Effect.runPromise(reduceWorld(initial, events))
+		expect(world.globalFlags).toEqual({ war: true })
+		expect(world.globalFlags.peace).toBeUndefined()
+	})
+
+	it('joins a faction once and leaves an absent faction unchanged', async () => {
+		const initial = await Effect.runPromise(
+			decodeWorldState({
+				...arthurWorld,
+				entities: {
+					Round: {
+						entityId: 'Round',
+						name: 'Round Table',
+						kind: 'faction',
+					},
+				},
+			}),
+		)
+		const join = {
+			eventId: 'evt-join',
+			targetEntity: 'Arthur',
+			coordinate: coordinate(1, 190),
+			type: 'MEMBERSHIP' as const,
+			op: 'JOIN' as const,
+			factionId: 'Round',
+		}
+		const joined = await Effect.runPromise(
+			reduceWorld(initial, [
+				await Effect.runPromise(decodeStoryEvent(join)),
+				await Effect.runPromise(
+					decodeStoryEvent({ ...join, eventId: 'evt-join-again' }),
+				),
+			]),
+		)
+		expect(joined.characters.Arthur?.factions).toEqual(['Round'])
+		const left = await Effect.runPromise(
+			reduceWorld(initial, [
+				await Effect.runPromise(
+					decodeStoryEvent({
+						eventId: 'evt-leave',
+						targetEntity: 'Arthur',
+						coordinate: coordinate(1, 191),
+						type: 'MEMBERSHIP',
+						op: 'LEAVE',
+						factionId: 'Round',
+					}),
+				),
+			]),
+		)
+		expect(left.characters.Arthur?.factions).toEqual([])
+	})
+
+	it('fails when a membership names a missing faction', async () => {
+		const initial = await Effect.runPromise(decodeWorldState(arthurWorld))
+		const result = await Effect.runPromise(
+			Effect.either(
+				reduceWorld(initial, [
+					await Effect.runPromise(
+						decodeStoryEvent({
+							eventId: 'evt-join',
+							targetEntity: 'Arthur',
+							coordinate: coordinate(1, 192),
+							type: 'MEMBERSHIP',
+							op: 'JOIN',
+							factionId: 'Round',
+						}),
+					),
+				]),
+			),
+		)
+		expect(result._tag).toBe('Left')
+		if (result._tag !== 'Left') return
+		expect(result.left._tag).toBe('UnknownEntity')
+		if (result.left._tag !== 'UnknownEntity') return
+		expect(result.left.targetEntity).toBe('Round')
+	})
+
+	it('replaces a character location and rejects a faction used as a region', async () => {
+		const initial = await Effect.runPromise(
+			decodeWorldState({
+				...arthurWorld,
+				entities: {
+					Camelot: {
+						entityId: 'Camelot',
+						name: 'Camelot',
+						kind: 'region',
+					},
+					Forest: {
+						entityId: 'Forest',
+						name: 'Forest',
+						kind: 'region',
+					},
+					Round: {
+						entityId: 'Round',
+						name: 'Round Table',
+						kind: 'faction',
+					},
+				},
+			}),
+		)
+		const world = await Effect.runPromise(
+			reduceWorld(initial, [
+				await Effect.runPromise(
+					decodeStoryEvent({
+						eventId: 'evt-camelot',
+						targetEntity: 'Arthur',
+						coordinate: coordinate(1, 200),
+						type: 'LOCATION_SET',
+						regionId: 'Camelot',
+					}),
+				),
+				await Effect.runPromise(
+					decodeStoryEvent({
+						eventId: 'evt-forest',
+						targetEntity: 'Arthur',
+						coordinate: coordinate(2, 201),
+						type: 'LOCATION_SET',
+						regionId: 'Forest',
+					}),
+				),
+			]),
+		)
+		expect(world.characters.Arthur?.location).toBe('Forest')
+		const rejected = await Effect.runPromise(
+			Effect.either(
+				reduceWorld(initial, [
+					await Effect.runPromise(
+						decodeStoryEvent({
+							eventId: 'evt-round',
+							targetEntity: 'Arthur',
+							coordinate: coordinate(1, 202),
+							type: 'LOCATION_SET',
+							regionId: 'Round',
+						}),
+					),
+				]),
+			),
+		)
+		expect(rejected._tag).toBe('Left')
+		if (rejected._tag !== 'Left') return
+		expect(rejected.left._tag).toBe('UnknownEntity')
 	})
 })

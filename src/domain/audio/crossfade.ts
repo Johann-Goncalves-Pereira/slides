@@ -7,11 +7,17 @@ export type DeckState = {
 	readonly volume: number
 }
 
+export type Overlay = {
+	readonly file: string
+	readonly volume: number
+}
+
 export type Playback = {
 	readonly decks: { readonly a: DeckState; readonly b: DeckState }
 	readonly active: DeckId | undefined
 	readonly holders: { readonly reading: boolean; readonly leaf: boolean }
-	readonly overlays: readonly string[]
+	readonly overlays: readonly Overlay[]
+	readonly master: number
 }
 
 export type GainChange = {
@@ -65,6 +71,7 @@ export const emptyPlayback = (): Playback => ({
 	active: undefined,
 	holders: { reading: false, leaf: false },
 	overlays: [],
+	master: 1,
 })
 
 export const planCrossfade = (
@@ -119,6 +126,45 @@ export const planCrossfade = (
 		stops,
 		next,
 	}
+}
+
+export type OverlayGain = {
+	readonly file: string
+	readonly to: number
+}
+
+const unit = (volume: number): number => {
+	if (!Number.isFinite(volume)) return 0
+	if (volume < 0) return 0
+	if (volume > 1) return 1
+	return volume
+}
+
+export const planOverlayVolume = (
+	playback: Playback,
+	file: string,
+	volume: number,
+): { readonly gain: OverlayGain | undefined; readonly next: Playback } => {
+	const current = playback.overlays.find(overlay => overlay.file === file)
+	if (current === undefined) return { gain: undefined, next: playback }
+	const to = unit(volume)
+	return {
+		gain: { file, to },
+		next: {
+			...playback,
+			overlays: playback.overlays.map(overlay =>
+				overlay.file === file ? { file, volume: to } : overlay,
+			),
+		},
+	}
+}
+
+export const planMasterVolume = (
+	playback: Playback,
+	volume: number,
+): { readonly master: number; readonly next: Playback } => {
+	const master = unit(volume)
+	return { master, next: { ...playback, master } }
 }
 
 export type HolderRelease = {

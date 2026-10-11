@@ -74,6 +74,50 @@ describe('decodeProposal', () => {
 		})
 	})
 
+	it('maps a flag, a membership, and a location', async () => {
+		const events = await Effect.runPromise(
+			decodeProposal(
+				{
+					events: [
+						{
+							type: 'FLAG_SET',
+							flag: 'war',
+							value: true,
+						},
+						{
+							type: 'MEMBERSHIP',
+							targetEntity: 'Arthur',
+							op: 'JOIN',
+							factionId: 'Round',
+						},
+						{
+							type: 'LOCATION_SET',
+							targetEntity: 'Arthur',
+							regionId: 'Camelot',
+						},
+					],
+				},
+				coordinate,
+				[],
+			),
+		)
+		expect(events.map(event => event.type)).toEqual([
+			'FLAG_SET',
+			'MEMBERSHIP',
+			'LOCATION_SET',
+		])
+		expect(events[0]).toMatchObject({ flag: 'war', value: true, coordinate })
+		expect(events[1]).toMatchObject({
+			targetEntity: 'Arthur',
+			op: 'JOIN',
+			factionId: 'Round',
+		})
+		expect(events[2]).toMatchObject({
+			targetEntity: 'Arthur',
+			regionId: 'Camelot',
+		})
+	})
+
 	it('rejects an override, an unknown type, and a duplicate event id', async () => {
 		const rejected = [
 			{

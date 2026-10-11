@@ -8,7 +8,7 @@ import type { StoryCoordinate } from '../domain/story/coordinate'
 import { RehydrationError } from '../domain/story/errors'
 import { Ledger } from '../domain/story/ledger'
 import { rehydrateAt } from '../domain/story/rehydrate'
-import { ledgerFromIndex } from '../domain/vault/index'
+import { eventCoordinates, ledgerFromIndex } from '../domain/vault/index'
 import type { VaultSession } from '../vault/session'
 import { createLayoutWorker, type LayoutPort } from './layout-worker'
 import { type HudActions, HudPanel } from './panel'
@@ -25,7 +25,7 @@ const hudCss = `
 .writing-hud {
 	background: #0B0F19;
 	color: #D4AF37;
-	font-family: sans-serif;
+	font-family: Inter, sans-serif;
 	height: 100%;
 	display: flex;
 	flex-direction: column;
@@ -34,13 +34,13 @@ const hudCss = `
 	overflow: auto;
 }
 .writing-hud h2 {
-	font-family: serif;
+	font-family: Cinzel, Palatino, "Palatino Linotype", serif;
 	color: #00E5FF;
 	margin: 0;
 }
 .writing-hud select,
 .writing-hud input {
-	font-family: sans-serif;
+	font-family: Inter, sans-serif;
 }
 .writing-hud .writing-graph {
 	height: 320px;
@@ -77,14 +77,19 @@ const stopList = (
 	branchId: string,
 ): readonly StoryCoordinate[] => {
 	const chapters = []
+	const events = []
 	for (const note of session.index().byId.values()) {
 		if (note.kind !== 'chapter') continue
 		chapters.push({
 			coordinate: note.coordinate,
 			tombstoned: note.sidecar.tombstoned,
 		})
+		if (note.sidecar.tombstoned) continue
+		for (const event of note.sidecar.events) {
+			events.push({ coordinate: event.coordinate })
+		}
 	}
-	return storyStops(chapters, branchId)
+	return storyStops(chapters, branchId, events)
 }
 
 const loadCoordinate = (
@@ -104,7 +109,13 @@ const loadCoordinate = (
 			Effect.mapError(cause => readError(cause)),
 		)
 		const positions = yield* worker.layout(graph)
-		return { world, graph, positions }
+		return {
+			world,
+			graph,
+			positions,
+			at: coordinate,
+			scenes: eventCoordinates(session.index(), coordinate),
+		}
 	})
 
 export class WritingHudView extends ItemView {

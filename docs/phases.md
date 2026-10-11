@@ -10,3 +10,4 @@ Progress for the Writing plugin. Phase 1 is the pure story engine in `src/domain
 | Editor blocks | Done | [editor-blocks](editor-blocks/README.md) | Wikilink tracking plus `character-sheet`, `rpg-event`, and `relationship-matrix` blocks that read `rehydrateAt` and do not write canon back into the note. |
 | 4. Relationship HUD | Done | [relationship-hud](relationship-hud/README.md) | Scrubber, character sheet, affinity graph, and radial charts for one coordinate. React and React Flow arrive with this phase. |
 | 5. Audio engine | Done | [audio-engine](audio-engine/README.md) | Reading-view comment cues crossfade on two decks. A manual leaf shares that engine. Observers and audio nodes are released on unload. |
+| Canon extensions | Done | [event-sourcing](event-sourcing/README.md) | World flags, projected status remaining, Mundo entities, membership, location, a layered relationship graph, and overlay volume on the shared audio engine. |

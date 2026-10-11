@@ -5,6 +5,7 @@ import type {
 	ActiveStatus,
 	CharacterState,
 	InventoryItem,
+	WorldEntity,
 	WorldState,
 } from './state'
 
@@ -12,6 +13,7 @@ const withCharacter = (
 	world: WorldState,
 	character: CharacterState,
 ): WorldState => ({
+	...world,
 	characters: {
 		...world.characters,
 		[character.characterId]: character,
@@ -23,6 +25,9 @@ type AffinityShift = Extract<StoryEvent, { type: 'AFFINITY_SHIFT' }>
 type InventoryMutation = Extract<StoryEvent, { type: 'INVENTORY_MUTATION' }>
 type StatusEffect = Extract<StoryEvent, { type: 'STATUS_EFFECT' }>
 type OverrideSync = Extract<StoryEvent, { type: 'OVERRIDE_SYNC' }>
+type FlagSet = Extract<StoryEvent, { type: 'FLAG_SET' }>
+type Membership = Extract<StoryEvent, { type: 'MEMBERSHIP' }>
+type LocationSet = Extract<StoryEvent, { type: 'LOCATION_SET' }>
 
 export type ReduceError = UnknownEntity | InsufficientQuantity
 
@@ -197,7 +202,72 @@ const applyStatus = (
 const statusFrom = (event: StatusEffect): ActiveStatus =>
 	event.durationScenes === undefined
 		? { name: event.name }
-		: { name: event.name, durationScenes: event.durationScenes }
+		: {
+				name: event.name,
+				durationScenes: event.durationScenes,
+				since: event.coordinate,
+			}
+
+const requireKind = (
+	world: WorldState,
+	entityId: string,
+	eventId: string,
+	kind: WorldEntity['kind'],
+): Effect.Effect<WorldEntity, UnknownEntity> => {
+	const entity = world.entities[entityId]
+	if (entity === undefined || entity.kind !== kind) {
+		return Effect.fail(new UnknownEntity({ targetEntity: entityId, eventId }))
+	}
+	return Effect.succeed(entity)
+}
+
+const applyFlag = (world: WorldState, event: FlagSet): WorldState => ({
+	...world,
+	globalFlags: { ...world.globalFlags, [event.flag]: event.value },
+})
+
+const applyMembership = (
+	world: WorldState,
+	event: Membership,
+): Effect.Effect<WorldState, UnknownEntity> =>
+	Effect.gen(function* () {
+		const character = yield* requireCharacter(
+			world,
+			event.targetEntity,
+			event.eventId,
+		)
+		yield* requireKind(world, event.factionId, event.eventId, 'faction')
+		const already = character.factions.includes(event.factionId)
+		const factions =
+			event.op === 'JOIN'
+				? already
+					? character.factions
+					: [...character.factions, event.factionId]
+				: character.factions.filter(factionId => factionId !== event.factionId)
+		return withCharacter(world, {
+			...character,
+			factions,
+			lastUpdatedCoordinate: event.coordinate,
+		})
+	})
+
+const applyLocation = (
+	world: WorldState,
+	event: LocationSet,
+): Effect.Effect<WorldState, UnknownEntity> =>
+	Effect.gen(function* () {
+		const character = yield* requireCharacter(
+			world,
+			event.targetEntity,
+			event.eventId,
+		)
+		yield* requireKind(world, event.regionId, event.eventId, 'region')
+		return withCharacter(world, {
+			...character,
+			location: event.regionId,
+			lastUpdatedCoordinate: event.coordinate,
+		})
+	})
 
 const applyOverride = (
 	world: WorldState,
@@ -235,6 +305,12 @@ const applyEvent = (
 			return applyStatus(world, event)
 		case 'OVERRIDE_SYNC':
 			return applyOverride(world, event)
+		case 'FLAG_SET':
+			return Effect.succeed(applyFlag(world, event))
+		case 'MEMBERSHIP':
+			return applyMembership(world, event)
+		case 'LOCATION_SET':
+			return applyLocation(world, event)
 	}
 }
 

@@ -6,6 +6,7 @@ import {
 	decodeWorldState,
 	type InventoryItem,
 } from '../story/state'
+import { remainingStatuses } from '../story/status'
 
 export type StopSource = {
 	readonly coordinate: StoryCoordinate
@@ -24,6 +25,7 @@ const keyOf = (coordinate: StoryCoordinate): string =>
 export const storyStops = (
 	chapters: readonly StopSource[],
 	branchId: string,
+	events: readonly { readonly coordinate: StoryCoordinate }[] = [],
 ): readonly StoryCoordinate[] => {
 	const stops: StoryCoordinate[] = []
 	const seen = new Set<string>()
@@ -40,13 +42,17 @@ export const storyStops = (
 		beatIndex: 0,
 		timestamp: 0,
 	})
-	const ordered = chapters
-		.filter(
-			chapter =>
-				!chapter.tombstoned && chapter.coordinate.branchId === branchId,
-		)
-		.map(chapter => chapter.coordinate)
-		.sort(compareCoordinates)
+	const ordered = [
+		...chapters
+			.filter(
+				chapter =>
+					!chapter.tombstoned && chapter.coordinate.branchId === branchId,
+			)
+			.map(chapter => chapter.coordinate),
+		...events
+			.map(event => event.coordinate)
+			.filter(coordinate => coordinate.branchId === branchId),
+	].sort(compareCoordinates)
 	for (const coordinate of ordered) push(coordinate)
 	return stops
 }
@@ -62,11 +68,18 @@ export type CharacterSheet = {
 	readonly inventory: readonly InventoryItem[]
 	readonly activeStatuses: readonly ActiveStatus[]
 	readonly affinities: readonly Affinity[]
+	readonly factions: readonly string[]
+	readonly location?: string
+	readonly flags: { readonly [flag: string]: boolean }
 }
 
 export const projectSheet = (
 	world: unknown,
 	characterId: string,
+	viewed?: {
+		readonly at: StoryCoordinate
+		readonly scenes: readonly StoryCoordinate[]
+	},
 ): Effect.Effect<CharacterSheet, UnknownCharacter | ParseResult.ParseError> =>
 	Effect.gen(function* () {
 		const decoded = yield* decodeWorldState(world)
@@ -74,12 +87,20 @@ export const projectSheet = (
 		if (character === undefined) {
 			return yield* Effect.fail(new UnknownCharacter({ characterId }))
 		}
-		return {
+		const activeStatuses =
+			viewed === undefined
+				? character.activeStatuses
+				: remainingStatuses(character.activeStatuses, viewed.at, viewed.scenes)
+		const sheet = {
 			characterId: character.characterId,
 			name: character.name,
 			stats: character.stats,
 			inventory: character.inventory,
-			activeStatuses: character.activeStatuses,
+			activeStatuses,
 			affinities: character.affinities,
+			factions: character.factions,
+			flags: decoded.globalFlags,
 		}
+		if (character.location === undefined) return sheet
+		return { ...sheet, location: character.location }
 	})

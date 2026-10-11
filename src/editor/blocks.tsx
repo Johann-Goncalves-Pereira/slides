@@ -48,6 +48,12 @@ const eventLines = (event: StoryEvent): readonly string[] => {
 			return Object.entries(event.stats)
 				.sort(byLabel)
 				.map(([stat, value]) => `${stat} = ${value}`)
+		case 'FLAG_SET':
+			return [`${event.flag} ${event.value}`]
+		case 'MEMBERSHIP':
+			return [`${event.op} ${event.factionId}`]
+		case 'LOCATION_SET':
+			return [event.regionId]
 	}
 }
 
@@ -95,6 +101,25 @@ export const CharacterSheetBlock = ({
 				</li>
 			))}
 		</ul>
+		<ul>
+			{sheet.factions.map(faction => (
+				<li key={faction}>{faction}</li>
+			))}
+		</ul>
+		{sheet.location === undefined ? null : <p>{sheet.location}</p>}
+		<ul>
+			{Object.entries(sheet.flags)
+				.sort(([left], [right]) => {
+					if (left < right) return -1
+					if (left > right) return 1
+					return 0
+				})
+				.map(([flag, value]) => (
+					<li key={flag}>
+						{flag}: {value ? 'true' : 'false'}
+					</li>
+				))}
+		</ul>
 	</section>
 )
 
@@ -134,7 +159,7 @@ export const RpgEventBlock = ({
 }) => (
 	<section className='writing-block'>
 		<h3>{event.type}</h3>
-		<p>{event.targetEntity}</p>
+		{'targetEntity' in event ? <p>{event.targetEntity}</p> : null}
 		<ul>
 			{eventLines(event).map(line => (
 				<li key={line}>{line}</li>

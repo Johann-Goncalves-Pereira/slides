@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { emptyPlayback, planCrossfade, releaseHolder } from './crossfade'
+import {
+	emptyPlayback,
+	planCrossfade,
+	planMasterVolume,
+	planOverlayVolume,
+	releaseHolder,
+} from './crossfade'
 
 const forest = {
 	file: 'ambient_dark_forest.mp3',
@@ -60,19 +66,21 @@ describe('releaseHolder', () => {
 		const held = {
 			...playing,
 			holders: { reading: true, leaf: true },
-			overlays: ['rain.mp3'],
+			overlays: [{ file: 'rain.mp3', volume: 0.7 }],
 		}
 		const readingLeft = releaseHolder(held, 'reading')
 		expect(readingLeft.silence).toBe(false)
 		expect(readingLeft.next.holders).toEqual({ reading: false, leaf: true })
 		expect(readingLeft.next.decks.a.file).toBe('ambient_dark_forest.mp3')
-		expect(readingLeft.next.overlays).toEqual(['rain.mp3'])
+		expect(readingLeft.next.overlays).toEqual([
+			{ file: 'rain.mp3', volume: 0.7 },
+		])
 
 		const leafOnly = releaseHolder(
 			{
 				...playing,
 				holders: { reading: true, leaf: true },
-				overlays: ['rain.mp3'],
+				overlays: [{ file: 'rain.mp3', volume: 0.7 }],
 			},
 			'leaf',
 		)
@@ -86,5 +94,33 @@ describe('releaseHolder', () => {
 		expect(bothLeft.next.decks.b.file).toBeUndefined()
 		expect(bothLeft.next.overlays).toEqual([])
 		expect(bothLeft.next.active).toBeUndefined()
+	})
+})
+
+describe('planOverlayVolume', () => {
+	it('changes one running overlay and leaves the others', () => {
+		const playback = {
+			...emptyPlayback(),
+			overlays: [
+				{ file: 'rain.mp3', volume: 0.7 },
+				{ file: 'tavern.mp3', volume: 0.4 },
+			],
+		}
+		const plan = planOverlayVolume(playback, 'rain.mp3', 0.2)
+		expect(plan.gain).toEqual({ file: 'rain.mp3', to: 0.2 })
+		expect(plan.next.overlays).toEqual([
+			{ file: 'rain.mp3', volume: 0.2 },
+			{ file: 'tavern.mp3', volume: 0.4 },
+		])
+		expect(planOverlayVolume(playback, 'missing.mp3', 0.2).gain).toBeUndefined()
+	})
+})
+
+describe('planMasterVolume', () => {
+	it('stores a master volume from 0 through 1', () => {
+		const plan = planMasterVolume(emptyPlayback(), 0.5)
+		expect(plan.master).toBe(0.5)
+		expect(plan.next.master).toBe(0.5)
+		expect(planMasterVolume(emptyPlayback(), 2).next.master).toBe(1)
 	})
 })

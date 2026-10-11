@@ -59,12 +59,40 @@ export const OverrideSyncEvent = Schema.Struct({
 	stats: StatDeltas,
 })
 
+export const FlagSetEvent = Schema.Struct({
+	eventId: Schema.NonEmptyString,
+	coordinate: StoryCoordinate,
+	type: Schema.Literal('FLAG_SET'),
+	flag: Schema.NonEmptyString,
+	value: Schema.Boolean,
+})
+
+export const MembershipEvent = Schema.Struct({
+	eventId: Schema.NonEmptyString,
+	targetEntity: Schema.NonEmptyString,
+	coordinate: StoryCoordinate,
+	type: Schema.Literal('MEMBERSHIP'),
+	op: Schema.Literal('JOIN', 'LEAVE'),
+	factionId: Schema.NonEmptyString,
+})
+
+export const LocationSetEvent = Schema.Struct({
+	eventId: Schema.NonEmptyString,
+	targetEntity: Schema.NonEmptyString,
+	coordinate: StoryCoordinate,
+	type: Schema.Literal('LOCATION_SET'),
+	regionId: Schema.NonEmptyString,
+})
+
 export const StoryEvent = Schema.Union(
 	StatChangeEvent,
 	AffinityShiftEvent,
 	InventoryMutationEvent,
 	StatusEffectEvent,
 	OverrideSyncEvent,
+	FlagSetEvent,
+	MembershipEvent,
+	LocationSetEvent,
 )
 
 export type StoryEvent = typeof StoryEvent.Type

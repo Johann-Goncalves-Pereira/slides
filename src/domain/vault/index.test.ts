@@ -100,6 +100,53 @@ describe('indexNotes', () => {
 		)
 		expect(world.characters.Arthur?.stats.HP).toBe(90)
 		expect(world.characters['note-sword']).toBeUndefined()
+		expect(world.entities).toEqual({})
+	})
+
+	it('loads a typed mundo note and rejects a duplicate entity id', async () => {
+		const round = {
+			path: 'Mundo/Round.md',
+			kind: 'mundo' as const,
+			frontmatter: {
+				noteId: 'note-round',
+				name: 'Round Table',
+				kind: 'faction',
+			},
+		}
+		const index = await Effect.runPromise(indexNotes([arthur, round]))
+		const note = index.byId.get('note-round')
+		expect(note?.kind).toBe('entity')
+		const ledger = await Effect.runPromise(ledgerFromIndex(index))
+		const world = await Effect.runPromise(
+			rehydrateAt(damage.coordinate).pipe(
+				Effect.provideService(Ledger, ledger),
+			),
+		)
+		expect(world.entities['Round Table']).toEqual({
+			entityId: 'Round Table',
+			name: 'Round Table',
+			kind: 'faction',
+		})
+		const duplicate = await Effect.runPromise(
+			Effect.either(
+				indexNotes([
+					round,
+					{
+						path: 'Mundo/Table.md',
+						kind: 'mundo',
+						frontmatter: {
+							noteId: 'note-table',
+							name: 'Another Table',
+							entityId: 'Round Table',
+							kind: 'faction',
+						},
+					},
+				]).pipe(Effect.flatMap(ledgerFromIndex)),
+			),
+		)
+		expect(duplicate._tag).toBe('Left')
+		if (duplicate._tag !== 'Left') return
+		expect(duplicate.left._tag).toBe('DuplicateEntity')
 	})
 
 	it('skips a note that has no note id', async () => {

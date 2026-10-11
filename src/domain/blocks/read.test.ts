@@ -111,4 +111,35 @@ describe('reading blocks', () => {
 			'EmptyMatrix',
 		)
 	})
+
+	it('shows the scenes a status has left at a later chapter', async () => {
+		const since = {
+			branchId: 'main',
+			chapterOrder: 1,
+			sceneIndex: 0,
+			beatIndex: 0,
+			timestamp: 10,
+		}
+		const index = await Effect.runPromise(
+			indexNotes([
+				arthur,
+				chapter('Livro/Cap1.md', 'note-cap1', 1, 10, [
+					{
+						eventId: 'evt-poison',
+						targetEntity: 'Arthur',
+						coordinate: since,
+						type: 'STATUS_EFFECT',
+						op: 'APPLY',
+						name: 'Poisoned',
+						durationScenes: 1,
+					},
+				]),
+				chapter('Livro/Cap2.md', 'note-cap2', 2, 20, []),
+			]),
+		)
+		const sheet = await Effect.runPromise(
+			readCharacterSheet(index, 'Livro/Cap2.md', 'Arthur'),
+		)
+		expect(sheet.activeStatuses).toEqual([])
+	})
 })

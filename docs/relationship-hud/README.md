@@ -12,7 +12,7 @@ A side panel shows canon at one story coordinate. Scrubbing does not write a sid
 - The panel is an Obsidian `ItemView` opened with "open relationship hud". React and React Flow render the sheet and the graph. The React root unmounts in `onClose` and any root still open unmounts in `onunload`.
 - Colors are ebony `#0B0F19`, wood `#1E1611`, metal `#D4AF37`, cyan `#00E5FF`, and violet `#A855F7`. Titles are serif. Controls are sans-serif.
 
-The ledger has no faction or membership event, so the graph does not invent faction nodes. Artifacts are inventory items.
+A faction membership and a character's region become graph edges when those Mundo entities exist. A held item whose id matches an artifact entity is an artifact node. An affinity target that matches an entity uses that entity's kind. An unreferenced spell or lore note stays off the graph. Layout places characters, then factions and regions, then everything else, in stable columns.
 
 ## Not in this phase
 

@@ -11,6 +11,7 @@ import { Ledger } from '../story/ledger'
 import type { ReduceError } from '../story/reduce'
 import { rehydrateAt } from '../story/rehydrate'
 import {
+	eventCoordinates,
 	type IndexError,
 	type IndexedChapter,
 	ledgerFromIndex,
@@ -87,7 +88,10 @@ export const readCharacterSheet = (
 		const characterId = yield* decodeCharacterSheetSource(source)
 		const chapter = yield* requireChapter(index, path)
 		const world = yield* worldAt(index, chapter.coordinate)
-		return yield* projectSheet(world, characterId)
+		return yield* projectSheet(world, characterId, {
+			at: chapter.coordinate,
+			scenes: eventCoordinates(index, chapter.coordinate),
+		})
 	})
 
 export const readRelationshipMatrix = (

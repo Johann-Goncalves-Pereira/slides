@@ -6,6 +6,8 @@ import {
 	type GainChange,
 	type Playback,
 	planCrossfade,
+	planMasterVolume,
+	planOverlayVolume,
 	releaseHolder,
 } from '../domain/audio/crossfade'
 import type { AudioCue } from '../domain/audio/cues'
@@ -16,7 +18,9 @@ export type PlaybackPort = {
 	readonly now: () => number
 	readonly load: (path: string) => Effect.Effect<void, AudioError>
 	readonly start: (start: DeckStart) => void
-	readonly startOverlay: (file: string, at: number) => void
+	readonly startOverlay: (file: string, at: number, volume: number) => void
+	readonly overlayGain: (file: string, to: number) => void
+	readonly master: (to: number) => void
 	readonly gain: (gain: GainChange) => void
 	readonly stop: (stop: DeckStop) => void
 	readonly stopOverlay: (file: string) => void
@@ -30,6 +34,11 @@ export type PlaybackEngine = {
 	) => Effect.Effect<void>
 	readonly release: (holder: 'reading' | 'leaf') => Effect.Effect<void>
 	readonly overlay: (file: string, enabled: boolean) => Effect.Effect<void>
+	readonly setOverlayVolume: (
+		file: string,
+		volume: number,
+	) => Effect.Effect<void>
+	readonly setMasterVolume: (volume: number) => Effect.Effect<void>
 	readonly snapshot: () => Playback
 	readonly close: () => void
 }
@@ -61,7 +70,7 @@ export const createPlayback = (
 		port.stop({ deck: 'b', at })
 		port.gain({ deck: 'a', to: 0, start: at, end: at })
 		port.gain({ deck: 'b', to: 0, start: at, end: at })
-		for (const file of state.overlays) port.stopOverlay(file)
+		for (const overlay of state.overlays) port.stopOverlay(overlay.file)
 	}
 
 	const loadStarts = (
@@ -110,7 +119,7 @@ export const createPlayback = (
 			const overlays = state.overlays
 			const released = releaseHolder(state, holder)
 			if (holder === 'leaf') {
-				for (const file of overlays) port.stopOverlay(file)
+				for (const overlay of overlays) port.stopOverlay(overlay.file)
 			}
 			if (released.silence) silence()
 			state = released.next
@@ -123,11 +132,11 @@ export const createPlayback = (
 				port.stopOverlay(file)
 				state = {
 					...state,
-					overlays: state.overlays.filter(current => current !== file),
+					overlays: state.overlays.filter(current => current.file !== file),
 				}
 				return
 			}
-			if (state.overlays.includes(file)) return
+			if (state.overlays.some(current => current.file === file)) return
 			const path = yield* Effect.either(audioAssetPath(assets(), file))
 			if (path._tag === 'Left') {
 				notice(path.left.message)
@@ -138,14 +147,38 @@ export const createPlayback = (
 				notice(messageOf(loaded.left))
 				return
 			}
-			port.startOverlay(file, port.now())
-			state = { ...state, overlays: [...state.overlays, file] }
+			const volume = 0.7
+			port.startOverlay(file, port.now(), volume)
+			state = {
+				...state,
+				overlays: [...state.overlays, { file, volume }],
+			}
+		})
+
+	const setOverlayVolume: PlaybackEngine['setOverlayVolume'] = (file, volume) =>
+		Effect.sync(() => {
+			if (closed) return
+			const planned = planOverlayVolume(state, file, volume)
+			if (planned.gain !== undefined) {
+				port.overlayGain(planned.gain.file, planned.gain.to)
+			}
+			state = planned.next
+		})
+
+	const setMasterVolume: PlaybackEngine['setMasterVolume'] = volume =>
+		Effect.sync(() => {
+			if (closed) return
+			const planned = planMasterVolume(state, volume)
+			port.master(planned.master)
+			state = planned.next
 		})
 
 	return {
 		play,
 		release,
 		overlay,
+		setOverlayVolume,
+		setMasterVolume,
 		snapshot: () => state,
 		close: () => {
 			if (closed) return

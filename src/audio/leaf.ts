@@ -88,15 +88,50 @@ export class AudioLeaf extends ItemView {
 				runVault(this.engine.play(cue, 'leaf'))
 			})
 		}
+		const playback = this.engine.snapshot()
+		contentEl.createEl('label', { text: 'Master' })
+		const master = contentEl.createEl('input', { type: 'range' })
+		master.min = '0'
+		master.max = '1'
+		master.step = '0.01'
+		master.value = String(playback.master)
+		master.addEventListener('input', () => {
+			runVault(this.engine.setMasterVolume(Number(master.value)))
+		})
 		const overlay = contentEl.createEl('input', { type: 'text' })
 		overlay.placeholder = 'rain.mp3'
 		const start = contentEl.createEl('button', { text: 'Start overlay' })
+		const refresh = (enabled: boolean) => {
+			runVault(
+				this.engine.overlay(overlay.value.trim(), enabled).pipe(
+					Effect.andThen(() =>
+						Effect.tryPromise({
+							try: () => this.render(),
+							catch: () => 'Could not render audio.',
+						}),
+					),
+				),
+			)
+		}
 		start.addEventListener('click', () => {
-			runVault(this.engine.overlay(overlay.value.trim(), true))
+			refresh(true)
 		})
 		const stop = contentEl.createEl('button', { text: 'Stop overlay' })
 		stop.addEventListener('click', () => {
-			runVault(this.engine.overlay(overlay.value.trim(), false))
+			refresh(false)
 		})
+		for (const running of playback.overlays) {
+			contentEl.createEl('label', { text: running.file })
+			const slider = contentEl.createEl('input', { type: 'range' })
+			slider.min = '0'
+			slider.max = '1'
+			slider.step = '0.01'
+			slider.value = String(running.volume)
+			slider.addEventListener('input', () => {
+				runVault(
+					this.engine.setOverlayVolume(running.file, Number(slider.value)),
+				)
+			})
+		}
 	}
 }
