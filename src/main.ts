@@ -1,6 +1,9 @@
 import { Effect, Exit, Scope } from 'effect'
 import { Notice, Plugin } from 'obsidian'
 import { ollamaModel } from './api/api-client'
+import { AUDIO_VIEW_TYPE, AudioLeaf, closeAudioViews } from './audio/leaf'
+import { registerReadingAudio } from './audio/reading'
+import { createAudioEngine } from './audio/web-audio'
 import { wikilinkEdits } from './domain/extract/beats'
 import { ModelClient } from './domain/extract/model'
 import { ExtractionError } from './domain/extract/proposal'
@@ -11,6 +14,8 @@ import {
 } from './domain/extract/queue'
 import { runLoad } from './domain/manifest'
 import { defaultPluginSettings } from './domain/vault/roots'
+import { linkTracker } from './editor/links'
+import { registerEditorBlocks } from './editor/register'
 import { closeHudViews, HUD_VIEW_TYPE, WritingHudView } from './hud/view'
 import { loadStoredSettings, obsidianPort, runVault } from './vault/obsidian'
 import { ProposalModal } from './vault/proposal-modal'
@@ -39,6 +44,9 @@ const errorMessage = (cause: unknown): string => {
 
 export default class WritingPlugin extends Plugin {
 	private closeExtraction: Effect.Effect<void> | undefined
+	private releaseReading: (() => void) | undefined
+	private closeAudio: (() => void) | undefined
+	private releaseBlocks: (() => void) | undefined
 
 	async onload() {
 		await Effect.runPromise(runLoad())
@@ -107,9 +115,57 @@ export default class WritingPlugin extends Plugin {
 		}
 		const enqueue = (request: ExtractionRequest) =>
 			queue.enqueue(request).pipe(Effect.provideService(ModelClient, model))
+		this.registerEditorExtension(
+			linkTracker(
+				() => session.roots(),
+				text => {
+					const path = this.app.workspace.getActiveFile()?.path
+					if (path === undefined) return
+					const chapter = chapterAt(session, path)
+					if (chapter === undefined) return
+					runVault(
+						enqueue({
+							chapterPath: path,
+							noteId: chapter.noteId,
+							text,
+							coordinate: chapter.coordinate,
+							pauseMillis: session.settings().pauseMillis,
+						}),
+					)
+				},
+			).extension,
+		)
+		this.releaseBlocks = registerEditorBlocks(this, session)
 		const lastText = new Map<string, string>()
 		this.addSettingTab(new WritingSettingTab(this.app, this, session))
 		this.registerView(HUD_VIEW_TYPE, leaf => new WritingHudView(leaf, session))
+		const audio = createAudioEngine(
+			this,
+			() => session.settings().assets,
+			message => {
+				new Notice(message)
+			},
+		)
+		this.closeAudio = () => {
+			audio.close()
+		}
+		this.releaseReading = registerReadingAudio(this, audio, message => {
+			new Notice(message)
+		})
+		this.registerView(AUDIO_VIEW_TYPE, leaf => new AudioLeaf(leaf, audio))
+		this.addCommand({
+			id: 'open-audio',
+			name: 'open audio',
+			callback: () => {
+				void this.app.workspace
+					.getLeaf(true)
+					.setViewState({ type: AUDIO_VIEW_TYPE, active: true })
+					.catch((cause: unknown) => {
+						console.error(cause)
+						new Notice('Could not open audio.')
+					})
+			},
+		})
 		this.addCommand({
 			id: 'open-relationship-hud',
 			name: 'open relationship hud',
@@ -241,6 +297,10 @@ export default class WritingPlugin extends Plugin {
 
 	onunload(): void {
 		closeHudViews()
+		closeAudioViews()
+		this.releaseBlocks?.()
+		this.releaseReading?.()
+		this.closeAudio?.()
 		const closeExtraction = this.closeExtraction
 		if (closeExtraction === undefined) return
 		void Effect.runPromise(closeExtraction).catch((cause: unknown) => {

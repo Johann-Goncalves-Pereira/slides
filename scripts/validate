@@ -42,7 +42,7 @@ run tsc --noEmit --skipLibCheck
 if [ -f package.json ]; then
 	if grep -q '"test"' package.json; then
 		if [ "$PM" = "pnpm" ]; then
-			pnpm test --if-present
+			pnpm test
 		else
 			npm test --if-present
 		fi

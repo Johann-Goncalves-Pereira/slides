@@ -1,21 +1,14 @@
 # Editor blocks
 
-Not started. Reading view and the editor surface the ledger without becoming a second source of canon.
+Reading view and the editor surface the ledger. They do not become a second source of canon.
 
-## Purpose
+## What it does
 
-- A CodeMirror `StateField` records wikilink targets in the open note. A `ViewPlugin` notices when those links change and notifies the extraction queue. Typing itself stays synchronous.
-- Three markdown code blocks render from `rehydrateAt` for the note's coordinate:
-  - `character-sheet` — attributes for one character
-  - `rpg-event` — one ledger entry, with a control that requests removal of that event and a rebuild of the tail
-  - `relationship-matrix` — affinity scores between characters
-
-## Exit criteria
-
-- Blocks read state. They do not write stat numbers back into the note body.
-- React roots, if used, are created per container and unmounted on note change and on `onunload`.
-- The wikilink tracker does not start an LLM call itself. It only reports the edit to the extraction phase.
-
-## Constraints
-
-Post-processors must not keep detached DOM nodes after the plugin unloads.
+- `linkTracker` stores watched `Personagens/` and `Mundo/` targets in a CodeMirror `StateField`. Its `ViewPlugin` calls `wikilinkEdits` only when the document changes, then notifies the extraction queue with the new note text. The update stays synchronous and does not call the model.
+- `ExtractionQueue.enqueue` leaves an in-flight pause running when the same chapter path is enqueued with the same text. A different text still replaces that pause. The metadata listener still indexes frontmatter, and it still enqueues a link edit that never passes through the open editor.
+- Three markdown code blocks call `rehydrateAt` for the host chapter's coordinate:
+  - `character-sheet` takes one character id and shows that character's sheet.
+  - `rpg-event` takes one event id. The event is shown when it is on the same branch at or before the chapter. Remove drops that event from the sidecar that owns it. The note body is not edited. The next read folds the remaining tail.
+  - `relationship-matrix` takes an empty body and lists every affinity at that coordinate, sorted by subject, object, and axis.
+- A block whose host is not a live chapter shows a notice and no stats.
+- Each block mounts one React root through a `MarkdownRenderChild`. The root unmounts when that child unloads, and any root still mounted unmounts from `onunload`.
