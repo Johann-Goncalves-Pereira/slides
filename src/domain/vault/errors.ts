@@ -18,3 +18,7 @@ export class SidecarMismatch extends Data.TaggedError('SidecarMismatch')<{
 export class DuplicateCharacter extends Data.TaggedError('DuplicateCharacter')<{
 	readonly characterId: string
 }> {}
+
+export class DuplicateEntity extends Data.TaggedError('DuplicateEntity')<{
+	readonly entityId: string
+}> {}

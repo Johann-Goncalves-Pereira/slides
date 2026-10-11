@@ -103,6 +103,53 @@ const NoteIdProbe = Schema.Struct({
 	noteId: Schema.optional(Schema.NonEmptyString),
 })
 
+const EntityKind = Schema.Literal(
+	'faction',
+	'artifact',
+	'region',
+	'spell',
+	'lore',
+)
+
+const MundoKindProbe = Schema.Struct({
+	kind: Schema.optional(EntityKind),
+})
+
+const MundoEntityInput = Schema.Struct({
+	noteId: Schema.NonEmptyString,
+	name: Schema.NonEmptyString,
+	entityId: Schema.optional(Schema.NonEmptyString),
+	kind: EntityKind,
+})
+
+export type MundoEntityNote = {
+	readonly noteId: string
+	readonly name: string
+	readonly entityId: string
+	readonly kind: typeof EntityKind.Type
+}
+
+export const decodeMundoEntity = (
+	input: unknown,
+): Effect.Effect<MundoEntityNote, ParseResult.ParseError> =>
+	Effect.gen(function* () {
+		const note = yield* Schema.decodeUnknown(MundoEntityInput)(input)
+		return {
+			noteId: note.noteId,
+			name: note.name,
+			entityId: note.entityId ?? note.name,
+			kind: note.kind,
+		}
+	})
+
+export const mundoHasKind = (
+	frontmatter: unknown,
+): Effect.Effect<boolean, ParseResult.ParseError> =>
+	Effect.map(
+		Schema.decodeUnknown(MundoKindProbe)(frontmatter),
+		probe => probe.kind !== undefined,
+	)
+
 export const readNoteId = (
 	frontmatter: unknown,
 ): Effect.Effect<string | undefined, ParseResult.ParseError> =>

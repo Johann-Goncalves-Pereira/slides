@@ -81,6 +81,28 @@ const StatusInput = Schema.Struct({
 	eventId: Schema.optional(Schema.NonEmptyString),
 })
 
+const FlagInput = Schema.Struct({
+	type: Schema.Literal('FLAG_SET'),
+	flag: Schema.NonEmptyString,
+	value: Schema.Boolean,
+	eventId: Schema.optional(Schema.NonEmptyString),
+})
+
+const MembershipInput = Schema.Struct({
+	type: Schema.Literal('MEMBERSHIP'),
+	targetEntity: Schema.NonEmptyString,
+	op: Schema.Literal('JOIN', 'LEAVE'),
+	factionId: Schema.NonEmptyString,
+	eventId: Schema.optional(Schema.NonEmptyString),
+})
+
+const LocationInput = Schema.Struct({
+	type: Schema.Literal('LOCATION_SET'),
+	targetEntity: Schema.NonEmptyString,
+	regionId: Schema.NonEmptyString,
+	eventId: Schema.optional(Schema.NonEmptyString),
+})
+
 const Proposal = Schema.Struct({
 	events: Schema.Array(
 		Schema.Union(
@@ -89,6 +111,9 @@ const Proposal = Schema.Struct({
 			AffinityArrowInput,
 			InventoryInput,
 			StatusInput,
+			FlagInput,
+			MembershipInput,
+			LocationInput,
 		),
 	),
 })
@@ -163,7 +188,17 @@ const storyEvent = (
 			quantity: event.quantity,
 		}
 	}
-	if (event.durationScenes === undefined) {
+	if (event.type === 'STATUS_EFFECT') {
+		if (event.durationScenes === undefined) {
+			return {
+				eventId,
+				targetEntity: event.targetEntity,
+				coordinate,
+				type: 'STATUS_EFFECT',
+				op: event.op,
+				name: event.name,
+			}
+		}
 		return {
 			eventId,
 			targetEntity: event.targetEntity,
@@ -171,16 +206,34 @@ const storyEvent = (
 			type: 'STATUS_EFFECT',
 			op: event.op,
 			name: event.name,
+			durationScenes: event.durationScenes,
+		}
+	}
+	if (event.type === 'FLAG_SET') {
+		return {
+			eventId,
+			coordinate,
+			type: 'FLAG_SET',
+			flag: event.flag,
+			value: event.value,
+		}
+	}
+	if (event.type === 'MEMBERSHIP') {
+		return {
+			eventId,
+			targetEntity: event.targetEntity,
+			coordinate,
+			type: 'MEMBERSHIP',
+			op: event.op,
+			factionId: event.factionId,
 		}
 	}
 	return {
 		eventId,
 		targetEntity: event.targetEntity,
 		coordinate,
-		type: 'STATUS_EFFECT',
-		op: event.op,
-		name: event.name,
-		durationScenes: event.durationScenes,
+		type: 'LOCATION_SET',
+		regionId: event.regionId,
 	}
 }
 

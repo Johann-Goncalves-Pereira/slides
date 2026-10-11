@@ -1,9 +1,23 @@
 import { Effect, type ParseResult, Schema } from 'effect'
-import { decodeWorldState } from '../story/state'
+import {
+	type CharacterState,
+	decodeWorldState,
+	type WorldEntity,
+	type WorldState,
+} from '../story/state'
 
 export const HudNode = Schema.Struct({
 	id: Schema.NonEmptyString,
-	kind: Schema.Literal('character', 'item', 'object'),
+	kind: Schema.Literal(
+		'character',
+		'item',
+		'object',
+		'faction',
+		'artifact',
+		'region',
+		'spell',
+		'lore',
+	),
 	label: Schema.NonEmptyString,
 })
 
@@ -26,7 +40,26 @@ const HoldsEdge = Schema.Struct({
 	quantity: Schema.Int.pipe(Schema.positive()),
 })
 
-export const HudEdge = Schema.Union(AffinityEdge, HoldsEdge)
+const MemberEdge = Schema.Struct({
+	id: Schema.NonEmptyString,
+	source: Schema.NonEmptyString,
+	target: Schema.NonEmptyString,
+	kind: Schema.Literal('member'),
+})
+
+const PresentEdge = Schema.Struct({
+	id: Schema.NonEmptyString,
+	source: Schema.NonEmptyString,
+	target: Schema.NonEmptyString,
+	kind: Schema.Literal('present'),
+})
+
+export const HudEdge = Schema.Union(
+	AffinityEdge,
+	HoldsEdge,
+	MemberEdge,
+	PresentEdge,
+)
 
 export type HudEdge = typeof HudEdge.Type
 
@@ -48,69 +81,156 @@ const byId = (
 	return 0
 }
 
+type GraphDraft = {
+	readonly nodes: Map<string, HudNode>
+	readonly edges: HudEdge[]
+}
+
+const rememberEntity = (
+	draft: GraphDraft,
+	entities: WorldState['entities'],
+	named: ReadonlyMap<string, WorldEntity>,
+	entityId: string,
+): string | undefined => {
+	const entity = entities[entityId] ?? named.get(entityId)
+	if (entity === undefined) return undefined
+	const id = `${entity.kind}:${entity.entityId}`
+	draft.nodes.set(id, { id, kind: entity.kind, label: entity.name })
+	return id
+}
+
+const targetFor = (
+	draft: GraphDraft,
+	world: WorldState,
+	characterIds: ReadonlySet<string>,
+	characterByName: ReadonlyMap<string, string>,
+	named: ReadonlyMap<string, WorldEntity>,
+	object: string,
+): string => {
+	if (characterIds.has(object)) return `character:${object}`
+	const characterId = characterByName.get(object)
+	if (characterId !== undefined) return `character:${characterId}`
+	const entity = rememberEntity(draft, world.entities, named, object)
+	if (entity !== undefined) return entity
+	const id = `object:${object}`
+	draft.nodes.set(id, { id, kind: 'object', label: object })
+	return id
+}
+
+const linkCharacter = (
+	draft: GraphDraft,
+	world: WorldState,
+	characterIds: ReadonlySet<string>,
+	characterByName: ReadonlyMap<string, string>,
+	named: ReadonlyMap<string, WorldEntity>,
+	character: CharacterState,
+): void => {
+	const source = `character:${character.characterId}`
+	draft.nodes.set(source, {
+		id: source,
+		kind: 'character',
+		label: character.name,
+	})
+	for (const affinity of character.affinities) {
+		draft.edges.push({
+			id: `affinity:${character.characterId}:${affinity.object}:${affinity.axis}`,
+			source,
+			target: targetFor(
+				draft,
+				world,
+				characterIds,
+				characterByName,
+				named,
+				affinity.object,
+			),
+			kind: 'affinity',
+			axis: affinity.axis,
+			score: affinity.score,
+		})
+	}
+	for (const item of character.inventory) {
+		const artifact = rememberEntity(draft, world.entities, named, item.itemId)
+		const target = artifact ?? `item:${item.itemId}`
+		if (artifact === undefined && !draft.nodes.has(target)) {
+			draft.nodes.set(target, { id: target, kind: 'item', label: item.name })
+		}
+		draft.edges.push({
+			id: `holds:${character.characterId}:${item.itemId}`,
+			source,
+			target,
+			kind: 'holds',
+			quantity: item.quantity,
+		})
+	}
+	for (const factionId of character.factions) {
+		const faction = world.entities[factionId]
+		if (faction?.kind !== 'faction') continue
+		const target = rememberEntity(
+			draft,
+			world.entities,
+			named,
+			faction.entityId,
+		)
+		if (target === undefined) continue
+		draft.edges.push({
+			id: `member:${character.characterId}:${faction.entityId}`,
+			source,
+			target,
+			kind: 'member',
+		})
+	}
+	const region =
+		character.location === undefined
+			? undefined
+			: world.entities[character.location]
+	if (region?.kind !== 'region') return
+	const target = rememberEntity(draft, world.entities, named, region.entityId)
+	if (target === undefined) return
+	draft.edges.push({
+		id: `present:${character.characterId}:${region.entityId}`,
+		source,
+		target,
+		kind: 'present',
+	})
+}
+
 export const projectGraph = (
 	world: unknown,
 ): Effect.Effect<HudGraph, ParseResult.ParseError> =>
 	Effect.gen(function* () {
 		const decoded = yield* decodeWorldState(world)
 		const characters = Object.values(decoded.characters)
+		const named = new Map(
+			Object.values(decoded.entities).map(entity => [entity.name, entity]),
+		)
+		const draft: GraphDraft = { nodes: new Map(), edges: [] }
 		const characterIds = new Set(
 			characters.map(character => character.characterId),
 		)
 		const characterByName = new Map(
 			characters.map(character => [character.name, character.characterId]),
 		)
-		const nodes = new Map<string, HudNode>()
-		const edges: HudEdge[] = []
-		const targetFor = (object: string): string => {
-			if (characterIds.has(object)) return `character:${object}`
-			const named = characterByName.get(object)
-			if (named !== undefined) return `character:${named}`
-			const id = `object:${object}`
-			nodes.set(id, { id, kind: 'object', label: object })
-			return id
-		}
 		for (const character of characters) {
-			const source = `character:${character.characterId}`
-			nodes.set(source, {
-				id: source,
-				kind: 'character',
-				label: character.name,
-			})
-			for (const affinity of character.affinities) {
-				const target = targetFor(affinity.object)
-				edges.push({
-					id: `affinity:${character.characterId}:${affinity.object}:${affinity.axis}`,
-					source,
-					target,
-					kind: 'affinity',
-					axis: affinity.axis,
-					score: affinity.score,
-				})
-			}
-			for (const item of character.inventory) {
-				const target = `item:${item.itemId}`
-				if (!nodes.has(target)) {
-					nodes.set(target, { id: target, kind: 'item', label: item.name })
-				}
-				edges.push({
-					id: `holds:${character.characterId}:${item.itemId}`,
-					source,
-					target,
-					kind: 'holds',
-					quantity: item.quantity,
-				})
-			}
+			linkCharacter(
+				draft,
+				decoded,
+				characterIds,
+				characterByName,
+				named,
+				character,
+			)
 		}
 		return yield* decodeHudGraph({
-			nodes: [...nodes.values()].sort(byId),
-			edges: edges.sort(byId),
+			nodes: [...draft.nodes.values()].sort(byId),
+			edges: draft.edges.sort(byId),
 		})
 	})
 
 export const affinityTone = (
 	score: number,
 ): { readonly color: string; readonly motion: string } => {
+	if (score >= 50) return { color: '#22C55E', motion: 'approach' }
+	if (score <= -50) return { color: '#EF4444', motion: 'recede' }
 	if (score > 0) return { color: '#00E5FF', motion: 'approach' }
 	if (score < 0) return { color: '#A855F7', motion: 'recede' }
 	return { color: '#D4AF37', motion: 'still' }
@@ -123,21 +243,33 @@ export type GraphPosition = {
 }
 
 export const layoutGraph = (graph: {
-	readonly nodes: readonly { readonly id: string }[]
+	readonly nodes: readonly { readonly id: string; readonly kind?: string }[]
 }): readonly GraphPosition[] => {
 	const nodes = [...graph.nodes].sort((left, right) => {
 		if (left.id < right.id) return -1
 		if (left.id > right.id) return 1
 		return 0
 	})
-	const radius = 200
-	if (nodes.length === 0) return []
-	return nodes.map((node, index) => {
-		const angle = (index / nodes.length) * 2 * Math.PI
-		return {
-			id: node.id,
-			x: Math.round(Math.cos(angle) * radius),
-			y: Math.round(Math.sin(angle) * radius),
+	const columns = new Map<number, readonly { readonly id: string }[]>()
+	for (const node of nodes) {
+		const x =
+			node.kind === 'character'
+				? 0
+				: node.kind === 'faction' || node.kind === 'region'
+					? 280
+					: 560
+		const column = columns.get(x) ?? []
+		columns.set(x, [...column, node])
+	}
+	const positions: GraphPosition[] = []
+	for (const [x, column] of columns) {
+		for (const [index, node] of column.entries()) {
+			positions.push({ id: node.id, x, y: index * 120 })
 		}
+	}
+	return positions.sort((left, right) => {
+		if (left.id < right.id) return -1
+		if (left.id > right.id) return 1
+		return 0
 	})
 }
